@@ -72,6 +72,23 @@ node tools/validate-script.mjs your-script.axs
 - If the app on your phone is a different version: **import one of the samples first as a smoke test**; when in doubt, **the model inside the app wins**.
 - Maintainer flow: after editing `SKILL.md`, run `node tools/validate-script.mjs examples/*.axs` (one file at a time) and make sure everything is green before committing. CI does the same on every push.
 
+## Maintainers: sync from the project
+
+This repository is the **public release** of the skill pack that lives inside the WeMod project (the only difference: three ticket-grabbing / order-snatching samples are removed here). After the project-side `SKILL.md` or validator changes, run this **inside this repository**:
+
+```bash
+node tools/sync-from-project.mjs                 # default source: the in-project skill directory
+node tools/sync-from-project.mjs --dry-run       # show what would change, write nothing
+node tools/sync-from-project.mjs --project <dir> # use another in-project skill path
+```
+
+What it does:
+
+- **Overwrites** `SKILL.md` and `tools/validate-script.mjs`, and mirrors `examples/*.axs` (excluding the ticket-grabbing samples);
+- Extra samples on this side are **reported, never deleted automatically**;
+- Then it self-checks that **no public document references an excluded sample** (a dangling reference exits non-zero) and re-validates every sample;
+- **Never touches** `README*`, `LICENSE`, `.gitignore`, `.github/` — those are specific to this repository.
+
 ## Contributing
 
 Issues and PRs are welcome: add fields, fix semantics, contribute samples. **Every new sample must pass `tools/validate-script.mjs`.**

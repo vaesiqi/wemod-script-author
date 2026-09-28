@@ -61,6 +61,23 @@ node tools/validate-script.mjs 你的脚本.axs
 - 若你手机上的 App 版本与技能包版本不一致：**先导入一个样例脚本实测**；不一致时**以 App 内的模型为准**。
 - 维护者流程：改完 `SKILL.md` 后跑一遍 `node tools/validate-script.mjs examples/*.axs`，全绿再提交。
 
+## 维护者：从项目同步
+
+本仓库是 WeMod 项目内技能包的**对外发布版**（差异：按发布口径移除抢票 / 抢单三个样例）。项目侧改了 `SKILL.md` 或校验器后，在**本仓库**执行：
+
+```bash
+node tools/sync-from-project.mjs                 # 默认从 D:/wemod/wemod/.reasonix/skills/wemod-script-author 同步
+node tools/sync-from-project.mjs --dry-run       # 只看会改什么，不写文件
+node tools/sync-from-project.mjs --project <dir> # 指定其它项目技能包路径
+```
+
+脚本行为：
+
+- **会覆盖** `SKILL.md`、`tools/validate-script.mjs`，并镜像 `examples/*.axs`（自动排除抢票 / 抢单样例）；
+- 开源侧多余样例**只提示、不自动删除**；
+- 同步后自检**对外文档是否引用了被排除的样例**（悬空引用会直接非 0 退出），再跑一遍全部样例校验；
+- **不会触碰** `README*`、`LICENSE`、`.gitignore`、`.github/`（这些是本仓库专属内容）。
+
 ## 贡献
 
 欢迎提 Issue / PR：补字段、修正语义、新增样例（**新样例必须能被 `tools/validate-script.mjs` 跑通**）。
