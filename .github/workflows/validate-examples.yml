@@ -1,0 +1,70 @@
+name: Validate examples
+
+# 目的：保证 examples/ 下的样例脚本始终能通过离线校验器（技能包对外承诺"样例全绿"）。
+# 同时也冒烟测试校验器自身的失败路径——防止有人把它改成永远成功，那样 CI 就失去意义。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate-examples:
+    name: 校验样例（Node ${{ matrix.node-version }}）
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['20.x', '22.x']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: 校验 examples 下全部样例
+        shell: bash
+        run: |
+          set -uo pipefail
+          shopt -s nullglob
+          files=(examples/*.axs)
+          count=${#files[@]}
+          echo "发现 $count 个样例脚本"
+          if [ "$count" -lt 6 ]; then
+            echo "::error::examples 下样例少于 6 个（疑似被误删），当前 $count 个"
+            exit 1
+          fi
+          fail=0
+          for f in "${files[@]}"; do
+            echo "::group::校验 $f"
+            node tools/validate-script.mjs "$f" || fail=1
+            echo "::endgroup::"
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::存在未通过校验的样例"
+          fi
+          exit $fail
+
+      - name: 冒烟测试「校验器对坏脚本必须失败」
+        shell: bash
+        run: |
+          set -uo pipefail
+          printf '{ 这不是合法 JSON' > /tmp/broken.axs
+          if node tools/validate-script.mjs /tmp/broken.axs; then
+            echo "::error::校验器对损坏脚本返回了成功（退出码 0），CI 失去意义"
+            exit 1
+          fi
+          echo "✓ 失败路径正常：坏脚本被判定为非 0 退出"
+
+      - name: 冒烟测试「无参数必须报用法」
+        shell: bash
+        run: |
+          set -uo pipefail
+          if node tools/validate-script.mjs; then
+            echo "::error::无参数时返回了成功"
+            exit 1
+          fi
+          echo "✓ 无参数时正确报用法"
