@@ -57,7 +57,7 @@ node tools/validate-script.mjs 你的脚本.axs
 
 ## 版本与模型基准
 
-- 数据基准：模型快照 **2026-09-16**（本次校准内容见 `SKILL.md` 顶部说明）。
+- 数据基准：模型快照 **2026-09-28**（含 Shell 命令、按键注入、截屏保存位置等本轮新增；校准内容见 `SKILL.md` 顶部说明）。
 - 若你手机上的 App 版本与技能包版本不一致：**先导入一个样例脚本实测**；不一致时**以 App 内的模型为准**。
 - 维护者流程：改完 `SKILL.md` 后跑一遍 `node tools/validate-script.mjs examples/*.axs`，全绿再提交。
 

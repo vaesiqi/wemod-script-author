@@ -1,0 +1,13 @@
+# 统一行尾为 LF。
+#
+# 背景：本仓库是 WeMod 项目内技能包的对外发布版，由 tools/sync-from-project.mjs 同步。
+# Windows 上 git 的 core.autocrlf 会把工作区文件转成 CRLF，而项目侧是 LF，
+# 于是同一内容出现「字节不同」的假变更，同步时表现为全量 diff（LF/CRLF 反复横跳）。
+# 这里显式声明 LF，配合脚本内的换行归一化，保证「内容相同 = 无变化」。
+* text=auto eol=lf
+
+*.md   text eol=lf
+*.mjs  text eol=lf
+*.json text eol=lf
+*.axs  text eol=lf
+*.yml  text eol=lf

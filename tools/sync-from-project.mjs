@@ -44,14 +44,24 @@ function fail(msg) {
   process.exit(1);
 }
 
+/** 统一行尾为 LF。
+ *  源（项目仓库）与本仓库可能因各自的 core.autocrlf / .gitattributes 得到不同行尾，
+ *  同一内容会出现「字节不同」的假变更，导致每次同步都全量 diff（LF/CRLF 反复横跳）。
+ *  这里统一按 LF 归一化后再比较与写入，保证「内容相同 = 无变化」。 */
+function normalizeNewlines(text) {
+  return text.replace(/\r\n/g, '\n');
+}
+
 function copyIfChanged(src, dst, label) {
-  const srcText = fs.readFileSync(src);
-  const same = fs.existsSync(dst) && Buffer.compare(srcText, fs.readFileSync(dst)) === 0;
+  const srcText = normalizeNewlines(fs.readFileSync(src, 'utf8'));
+  const same = fs.existsSync(dst)
+    ? normalizeNewlines(fs.readFileSync(dst, 'utf8')) === srcText
+    : false;
   if (same) {
     notes.push(`= ${label}（无变化）`);
     return;
   }
-  if (!dryRun) fs.writeFileSync(dst, srcText);
+  if (!dryRun) fs.writeFileSync(dst, srcText, 'utf8');
   changes.push(`${fs.existsSync(dst) ? '~' : '+'} ${label}`);
 }
 

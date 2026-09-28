@@ -68,7 +68,7 @@ node tools/validate-script.mjs your-script.axs
 
 ## Version and model baseline
 
-- Data baseline: model snapshot **2026-09-16** (calibration notes are at the top of `SKILL.md`).
+- Data baseline: model snapshot **2026-09-28** (includes Shell command, key injection, screenshot save target and more; calibration notes are at the top of `SKILL.md`).
 - If the app on your phone is a different version: **import one of the samples first as a smoke test**; when in doubt, **the model inside the app wins**.
 - Maintainer flow: after editing `SKILL.md`, run `node tools/validate-script.mjs examples/*.axs` (one file at a time) and make sure everything is green before committing. CI does the same on every push.
 

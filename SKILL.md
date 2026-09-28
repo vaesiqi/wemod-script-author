@@ -10,7 +10,7 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 > **自包含使用说明（放 GitHub 给别人用时先读这里）**
 > - **本技能包运行时零源码依赖**：写脚本所需的全部字段名/枚举值/语义都已内嵌在本文档（§3~§5），加上 `examples/` 黄金样例与 `tools/validate-script.mjs` 离线校验器，**不拥有 WeMod 源码也能写出可导入运行的脚本**。
 > - 使用流程：读本文档 → 对照 `examples/auto-douyin-skin-001.axs` → 写 JSON → `node tools/validate-script.mjs 你的脚本.axs` 预检 → 改后缀 `.axs` 导入手机 App。
-> - 数据基准：script-runtime 模型快照 **2026-09-16**（本次校准：识别侧补 `allTextFormat`/`templatePath` 资源外置/`colorVarKeys` 附加颜色从变量读/`suppressRadius` 等字段与 **OCR 行级匹配行为**；变量侧补 `ConsoleVariableBinding` 的 `label/description/group/layoutMode`；JS 侧修正 `setCookie/getCookie` 首参为 URL）。若你手机上的 App 版本与技能包版本不一致，先导入一个样例脚本实测；不一致时以 App 内的模型为准（维护者校准流程见技能包 README「维护」）。
+> - 数据基准：script-runtime 模型快照 **2026-09-28**（本轮校准：新增 **Shell 命令** 动作 `shell_command`（任意命令 + 结果写变量 + 执行前确认；只走 shell，需 Shizuku 或 root）、**按键注入** `key_event`（74 键 + 组合键，组合键需 Android 12+）、`take_screenshot.saveTarget`（自定义路径 / 系统相册）、`global_action` 扩到 10 项（音量 / 截图键 / 锁屏 / 电源菜单 / 粘贴）；上一轮（2026-09-16）校准：识别侧补 `allTextFormat`/`templatePath` 资源外置/`colorVarKeys` 附加颜色从变量读/`suppressRadius` 等字段与 **OCR 行级匹配行为**；变量侧补 `ConsoleVariableBinding` 的 `label/description/group/layoutMode`；JS 侧修正 `setCookie/getCookie` 首参为 URL）。若你手机上的 App 版本与技能包版本不一致，先导入一个样例脚本实测；不一致时以 App 内的模型为准（维护者校准流程见技能包 README「维护」）。
 > - 完整导入请走 **`.axs` 文件**（保留控制台变量/设置/虚拟控件）；编辑器「粘贴 JSON」只插节点、不带顶层字段。
 
 ## 0. 定位与边界
