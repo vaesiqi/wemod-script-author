@@ -1,0 +1,16 @@
+# 依赖与构建产物
+node_modules/
+dist/
+build/
+
+# 编辑器 / 系统
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# 日志与临时文件（校验器/本地试验产物不入库）
+*.log
+*.tmp.axs
+/tmp/
