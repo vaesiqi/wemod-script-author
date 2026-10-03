@@ -25,7 +25,7 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
   - `Repeat.times` 必须 >0（不支持无限次数）；无限循环用 `ActionConfig.repeat=-1` 或 `settings.runCount=0`。
   - 节点查找类动作（`node_*`/`find_and_*`/`wait_node` 等）**依赖无障碍服务**；纯坐标动作可走 Shizuku/root。
   - 视觉类动作（`*vision*`/`click_color`/`click_text`/`click_image`/`scroll_until_vision`）**依赖屏幕录制（MediaProjection）**。
-  - 写脚本时所有坐标/区域**同时给像素值（`x/y`）和百分比（`xPct/yPct`）**：运行时 `xPct` 在 `0f..1f` 时优先按百分比×当前屏幕，否则回退像素值；`xPct=-1f` 表示"未设置"。
+  - 写脚本时所有坐标/区域**同时给像素值（`x/y`）和百分比（`xPct/yPct`）**：运行时 `xPct` 在 `0f..1f` 时优先按百分比×当前屏幕，否则回退像素值；`xPct=-1f` 表示"未设置"。**单指/多指手势的每个路径节点也照此双写**（见 3.2.1）。
 
 ## 1. 交付流程（五步）
 
@@ -111,25 +111,82 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 | `break` | Break | 终止最近一层循环（Repeat/While） |
 | `continue` | Continue | 跳过当前轮次进入下一轮 |
 
-### 3.2 动作类型全清单（`model/ScriptAction.kt`，共 47 种，`action.type`）
+### 3.2 动作类型全清单（`model/ScriptAction.kt`，共 52 种，`action.type`；另有 `unknown_type` 兜底类，不要手写）
 
 **坐标基础动作**（可走 Shizuku/root 后端）：
 
 | type | 类 | 关键字段（必填加粗） |
 |---|---|---|
 | `tap` | Tap | **x,y**、duration=50、xPct/yPct=-1f、pointVarKey、durationVarKey |
-| `multi_tap` | MultiTap | **x,y**、count=2、intervalMs=80、duration=50 |
-| `touch_down` | TouchDown | **x,y**、pointerId=1、holdMs=10000 |
+| `multi_tap` | MultiTap | **x,y**（+ xPct/yPct）、count=2、intervalMs=80、duration=50 |
+| `touch_down` | TouchDown | **x,y**（+ xPct/yPct）、pointerId=1、holdMs=10000 |
 | `touch_up` | TouchUp | pointerId=1、releaseMs=50 |
-| `move_pointer` | MovePointer | touchDownRefId=""(引用 touch_down 的 pointerId)、x/y=-1、duration=300、pathType=LINE |
-| `drag_to_target` | DragToTarget | **startX,startY**、targetType=COORDINATE/NODE/VISION、targetX/Y 或 targetSelector 或 targetCondition、duration=400、waitTimeoutMs=3000 |
-| `long_press` | LongPress | **x,y**、duration=500 |
-| `swipe` | Swipe | **fromX,fromY,toX,toY**、duration=300、useBezierCurve=false；起点/终点可来自 IMAGE/TEXT/COLOR（fromSourceType/toSourceType） |
-| `single_touch` | SingleTouch | pointer(TouchPointer：points、duration、pathType=POINT/LINE/POLYLINE/RECORD/CURVE) |
-| `multi_touch` | MultiTouch | pointers:List<TouchPointer>（多指轨迹） |
+| `move_pointer` | MovePointer | touchDownRefId=""(引用 touch_down 的 pointerId)、x/y=-1（+ xPct/yPct）、duration=300、pathType=LINE |
+| `drag_to_target` | DragToTarget | **startX,startY**（+ startXPct/startYPct）、targetType=COORDINATE/NODE/VISION、targetX/Y 或 targetSelector 或 targetCondition（+ targetXPct/targetYPct）、duration=400、waitTimeoutMs=3000 |
+| `long_press` | LongPress | **x,y**（+ xPct/yPct）、duration=500 |
+| `swipe` | Swipe | **fromX,fromY,toX,toY**（+ fromXPct/fromYPct/toXPct/toYPct）、duration=300、useBezierCurve=false、bezierCurveFactor；起点/终点可来自 IMAGE/TEXT/COLOR（fromSourceType/toSourceType） |
+| `single_touch` | SingleTouch | **pointer**(TouchPointer：**pathNodes 路径节点数组**、duration、pathType=POINT/LINE/POLYLINE/RECORD/CURVE、segments 多段)；见 3.2.1 |
+| `multi_touch` | MultiTouch | **pointers:List\<TouchPointer\>**（多指轨迹，每根手指一套 pathNodes）；见 3.2.1 |
 | `click_color` | ClickColor | **condition**(ColorAt)、outputs |
 | `click_text` | ClickText | **condition**(TextExists)、outputs |
 | `click_image` | ClickImage | **condition**(TemplateMatch)、outputs |
+
+### 3.2.1 单指 / 多指触控与触点路径节点（`single_touch` / `multi_touch`）
+
+模型：`SingleTouch.pointer: TouchPointer`、`MultiTouch.pointers: List<TouchPointer>`（每根手指一个触点）。
+**触点是「有序路径节点」模型**（S-触控-路径-1）：旧字段 `points` + 单一目标已被 `pathNodes` 取代。
+
+**TouchPointer（一根手指）**
+
+| 字段 | 说明 |
+|---|---|
+| `pathNodes: List<TouchPathNode>` | **必填、至少 1 个**（模型无默认值，缺失 ⇒ 整个脚本导入失败）。运行前**先把非坐标节点全部解析成功，再派发整段手势**；任一节点解析失败 ⇒ 动作失败（不会用兜底坐标继续） |
+| `duration: Long` | **必填**，整条路径耗时（ms） |
+| `pathType` | `POINT`（只用第 1 个节点）/ `LINE`（首尾两点）/ `POLYLINE`（全部节点折线）/ `RECORD`（录制回放折线）/ `CURVE`（全部节点 + 贝塞尔平滑） |
+| `bezierCurveFactor` | 贝塞尔平滑系数（与 `swipe` 同名同义：0=直线、1=默认、>1 更弯），仅 `CURVE` 生效 |
+| `durationVarKey` | 路径时长从变量读 |
+| `startDelayMs` / `startDelayMsVarKey` | 该手指**晚于其他手指按下**的延迟（多指动作里做先后手） |
+| `segments: List<TouchSegment>?` | 多段触摸：同一手指的多次独立按下片段（段间抬起），如「手指 1 持续滑动期间手指 2 连点」。非空时按 segments 逐段驱动；**无障碍后端无法表达段间抬起，会退化为单段** |
+
+**TouchPathNode（路径上的一个点，自带来源）**
+
+| 字段 | 说明 |
+|---|---|
+| `sourceType` | `COORDINATE`（默认，静态坐标）/ `VARIABLE`（坐标变量）/ `IMAGE` / `TEXT` / `COLOR`（视觉条件）/ `NODE`（无障碍选择器）/ `TOUCH_DOWN`（引用某 `touch_down` 动作的坐标） |
+| `x`、`y` **+** `xPct`、`yPct` | **COORDINATE 的坐标必须双写**：像素 `x/y` + 百分比 `xPct/yPct`（0~1）。运行时 `xPct ∈ 0f..1f` 时**优先**按「百分比 × 当前屏幕」，否则回退 `x/y`（`xPct=-1f` 表示未设置）。跨分辨率稳不稳就看这里 |
+| `pointVarKey` | `VARIABLE`：坐标变量名 |
+| `condition` | `IMAGE`(TemplateMatch) / `TEXT`(TextExists) / `COLOR`(ColorRegion) 的视觉条件 |
+| `selector` | `NODE`：节点选择器 |
+| `touchDownRefId` | `TOUCH_DOWN`：被引用的 `touch_down` 动作节点 id（或 pointerId） |
+| `sustainMs` | 到达该点后原地停留（ms），0=不停 |
+| `durationToHereMs` | 从上一个节点走到该点耗时（ms），0=按总时长匀速 |
+
+约定：
+
+- **每根手指的每个坐标点都要双写**（`single_touch` 与 `multi_touch` 一致；校验器会逐个 pathNode 提示）。
+- 时序：`durationToHereMs` / `sustainMs` 都不写时整条路径按 `duration` 匀速；写了就按时间检查点走。
+- 旧 `points` 写法仍能导入（读取时迁移为 `pathNodes`，`xPct/yPct` 一并搬运），但**新脚本请直接写 `pathNodes`**。
+- 双指缩放这类「第一根手指按住不动、第二根手指移动」用不同 `startDelayMs` + 各自 pathType 表达；多指同时移动 = 同时按住并一起移动（各自 `pathNodes` 各自轨迹），不是两次点击。
+
+```json
+{ "type": "single_touch",
+  "pointer": {
+    "pathType": "LINE", "duration": 400,
+    "pathNodes": [
+      { "sourceType": "COORDINATE", "x": 324, "y": 1200, "xPct": 0.3, "yPct": 0.5 },
+      { "sourceType": "COORDINATE", "x": 756, "y": 1200, "xPct": 0.7, "yPct": 0.5 }
+    ] } }
+```
+
+```json
+{ "type": "multi_touch",
+  "pointers": [
+    { "pathType": "POINT", "duration": 120, "startDelayMs": 0,
+      "pathNodes": [ { "sourceType": "COORDINATE", "x": 324, "y": 600, "xPct": 0.3, "yPct": 0.25 } ] },
+    { "pathType": "POINT", "duration": 120, "startDelayMs": 60,
+      "pathNodes": [ { "sourceType": "COORDINATE", "x": 756, "y": 1800, "xPct": 0.7, "yPct": 0.75 } ] }
+  ] }
+```
 
 **无障碍语义级**（依赖无障碍服务）：
 
@@ -515,7 +572,7 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 - [ ] `touch_down` 的 pointerId 有对应 `touch_up`（`move_pointer.touchDownRefId` 引用存在），避免卡指。
 - [ ] 变量引用（表达式里的名字、VarKey 值、VarCondition.key）要么已定义、要么来自 `outputs` 绑定/面板变量；`scope` 只用 `LOCAL`/`GLOBAL`。
 - [ ] 条件项枚举拼写正确：`op`=LT/LE/EQ/NE/GE/GT；`action_run_status.status`=success/failure/not_run；`run_count_limit.resetMode`=loop_end/script_end/script_open。
-- [ ] 坐标双写：像素 `x/y` + 百分比 `xPct/yPct`（0~1 之间）；区域 `left/top/right/bottom` + `leftPct/topPct/rightPct/bottomPct`；虚拟控件给 `xPct/yPct`。
+- [ ] 坐标双写：像素 `x/y` + 百分比 `xPct/yPct`（0~1 之间）；区域 `left/top/right/bottom` + `leftPct/topPct/rightPct/bottomPct`；虚拟控件给 `xPct/yPct`；**单指/多指要逐 pathNode 双写，`multi_tap`/`long_press`/`swipe`/`move_pointer`/`drag_to_target` 同理**。
 - [ ] 运行需求齐备：有节点查找 → 提示无障碍；有视觉 → 提示屏幕录制；纯坐标可提示 Shizuku/root 可选。
 - [ ] `event_listener` 的 `async=true` 时目标非 LABEL；监听器不要自环指向自身（校验器会查）。
 - [ ] `run_code` 的 JS 只调上表命名空间（`runtime.variables/touch/vision/nodes/system/screen/network/files/process/crypto/cookies` 与全局 `console`）；**命名不是 `vars`/`sys`/`node`/`net`/`file`**；`http_request`/`file_action`/AI 视觉等一次性授权动作注意运行时授权弹窗。
@@ -531,6 +588,7 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 - ❌ 三元 `a ? b : c`（用 `if(a,b,c)`）。
 - ❌ 数组原地写 `arr[0]=x` / `arr.push(x)`（整体重建后 SetVar，追加用 `数组 + 值` / `concat` / `array(...)`）。
 - ❌ `Repeat.times <= 0` / 循环 `break` 出 `if`。
+- ❌ `single_touch`/`multi_touch` 写旧字段 `points`（虽能靠读时迁移导入，但新脚本一律用 `pathNodes`）；写了 `pathNodes` 却只给像素 `x/y` 不给 `xPct/yPct`（能跑，但换分辨率就偏，校验器会警告）。
 - ❌ 不存在的动作/节点 `type`（上表之外的一律没有，如 `keyboard`/`sound`/`vibrate` 动作——vibrate 只存在于 Prompt 的 `vibrate` 布尔字段）。
 - ❌ 期望普通异常被 `try_catch` 捕获（只捕获 TryCatchAbortException 语义路径）。
 - ❌ 在 JS 里访问 Android 类（Rhino 无 JavaMembers 支持，会 NoClassDefFoundError——只能用 `runtime.*`）。

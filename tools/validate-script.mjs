@@ -114,6 +114,9 @@ const ACTION_FIELD_TYPES = {
   delay: { millis: 'number' },
   tap: { x: 'number', y: 'number', duration: 'number' },
   run_code: { code: 'string' },
+  // 单指/多指（S-触控-路径-1 修订）：触点是对象 / 触点数组，写成数组或字符串是导入级错误
+  single_touch: { pointer: 'object' },
+  multi_touch: { pointers: 'array' },
 };
 
 /** 动作必填字段（无默认值字段） */
@@ -133,6 +136,34 @@ const ACTION_REQUIRED = {
   global_action: ['action'], http_request: ['url'],
   single_touch: ['pointer'], multi_touch: ['pointers'],
   drag_to_target: ['startX', 'startY'], multi_tap: ['x', 'y'],
+};
+
+/** 触点路径类型（与 ScriptAction.TouchPathType 对齐） */
+const TOUCH_PATH_TYPES = new Set(['POINT', 'LINE', 'POLYLINE', 'RECORD', 'CURVE']);
+
+/** 触点路径节点来源（与 ScriptAction.TouchTargetSourceType 对齐） */
+const TOUCH_TARGET_SOURCE_TYPES = new Set([
+  'COORDINATE', 'VARIABLE', 'IMAGE', 'TEXT', 'NODE', 'COLOR', 'TOUCH_DOWN',
+]);
+
+/**
+ * 坐标双写提示表：动作 type → [[像素字段, 百分比字段], ...]。
+ *
+ * 依据：模型里像素与百分比并存，`ScreenCoordinateUtils.resolveX/Y` 在 `xPct ∈ 0..1` 时
+ * **优先**按「百分比 × 当前屏幕」，否则回退像素值。只写像素不会报错，但换分辨率会失稳，
+ * 所以统一给警告、不做阻断。单指/多指走 [checkTouchPointer]（逐 pathNode 判定）。
+ */
+const COORD_DOUBLE_WRITE = {
+  tap: [['x', 'xPct'], ['y', 'yPct']],
+  multi_tap: [['x', 'xPct'], ['y', 'yPct']],
+  long_press: [['x', 'xPct'], ['y', 'yPct']],
+  touch_down: [['x', 'xPct'], ['y', 'yPct']],
+  move_pointer: [['x', 'xPct'], ['y', 'yPct']],
+  swipe: [['fromX', 'fromXPct'], ['fromY', 'fromYPct'], ['toX', 'toXPct'], ['toY', 'toYPct']],
+  drag_to_target: [
+    ['startX', 'startXPct'], ['startY', 'startYPct'],
+    ['targetX', 'targetXPct'], ['targetY', 'targetYPct'],
+  ],
 };
 
 /** 节点必填字段 */
@@ -263,10 +294,16 @@ function checkAction(action, path) {
     }
   }
   // 坐标双写提示（xPct 在 0..1 才算设置了百分比）
-  if (['tap', 'long_press', 'touch_down'].includes(type)) {
-    if (has(action, 'x') && (action.xPct === undefined || action.xPct < 0)) {
-      warn(`动作 ${type} 建议同时提供 xPct/yPct（0..1 百分比），跨分辨率更稳`, path);
+  warnMissingPercents(action, type, path);
+  // 单指/多指：触点路径节点结构与坐标双写（S-触控-路径-1）
+  if (type === 'single_touch' && isObj(action.pointer)) {
+    checkTouchPointer(action.pointer, path + '.pointer');
+  }
+  if (type === 'multi_touch' && Array.isArray(action.pointers)) {
+    if (action.pointers.length === 0) {
+      warn('multi_touch.pointers 是空数组：没有任何手指按下，动作不会有任何效果', path);
     }
+    action.pointers.forEach((pointer, i) => checkTouchPointer(pointer, `${path}.pointers[${i}]`));
   }
   // selector 存在性
   if (action.selector !== undefined && !isObj(action.selector)) error('selector 必须是对象', path);
@@ -350,6 +387,104 @@ function describeType(v) {
   if (Array.isArray(v)) return 'array';
   if (typeof v === 'string') return `string("${v.length > 12 ? v.slice(0, 12) + '…' : v}")`;
   return typeof v;
+}
+
+/* ============ S-触控-路径-1 修订：单指/多指触点与坐标双写 ============ */
+
+/** 像素坐标「已设置」判定（-1 等负值表示未设置） */
+function isSetPixel(v) {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0;
+}
+
+/** 百分比「已设置」判定（模型用 -1f 表示未设置，只有 0..1 会被运行时采用） */
+function isPercent(v) {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1;
+}
+
+function isNonEmptyString(v) {
+  return typeof v === 'string' && v.trim() !== '';
+}
+
+/**
+ * 表驱动的坐标双写提示：只对「给了有效像素值、却没给百分比」的动作报警告。
+ * 单指/多指不在表内（它们是触点里的 pathNodes，逐节点判定见 [checkTouchPathNode]）。
+ */
+function warnMissingPercents(action, type, path) {
+  const pairs = COORD_DOUBLE_WRITE[type];
+  if (!pairs) return;
+  const missing = pairs.filter(([px, pct]) => isSetPixel(action[px]) && !isPercent(action[pct]));
+  if (missing.length === 0) return;
+  const names = missing.map(([px, pct]) => `${px}→${pct}`).join('、');
+  warn(`动作 ${type} 建议同时提供百分比（当前缺 ${names}，0..1 之间），跨分辨率更稳`, path);
+}
+
+/**
+ * 触点校验（一根手指）。
+ *
+ * 边界：只校验 `single_touch.pointer` / `multi_touch.pointers[i]` 的结构、枚举与坐标双写；
+ * 责任：拦住「pathNodes 缺失/为空」「枚举拼错」「坐标点只给像素」三类问题 ——
+ * 前两类在 App 端要么直接导入失败、要么解析失败即动作失败，第三类会静默失稳。
+ */
+function checkTouchPointer(pointer, p) {
+  if (!isObj(pointer)) { error('触点必须是对象（TouchPointer）', p); return; }
+  // pathNodes 在模型里无默认值：缺失 ⇒ kotlinx 反序列化抛异常 ⇒ 整个脚本导入不了
+  if (!Array.isArray(pointer.pathNodes)) {
+    error('触点缺少 pathNodes（必填字段，旧写法 points 请改为 pathNodes），否则脚本导入失败', p);
+  } else if (pointer.pathNodes.length === 0) {
+    error('触点 pathNodes 是空数组：至少要有 1 个路径节点', p);
+  } else {
+    pointer.pathNodes.forEach((node, i) => checkTouchPathNode(node, `${p}.pathNodes[${i}]`));
+  }
+  if (!has(pointer, 'duration')) {
+    error('触点缺少 duration（必填字段，整条路径耗时 ms）', p);
+  } else if (typeof pointer.duration !== 'number') {
+    error('触点 duration 必须是数字（毫秒）', p + '.duration');
+  }
+  checkEnum(pointer.pathType, TOUCH_PATH_TYPES, 'pathType', p);
+  checkTouchSegments(pointer.segments, p);
+}
+
+/** 多段触摸（可选）：同一手指的多次独立按下片段（段间抬起） */
+function checkTouchSegments(segments, p) {
+  if (segments === undefined || segments === null) return;
+  if (!Array.isArray(segments)) { error('触点 segments 必须是数组', p + '.segments'); return; }
+  segments.forEach((seg, i) => {
+    const sp = `${p}.segments[${i}]`;
+    if (!isObj(seg)) { error('多段触摸的每一段必须是对象', sp); return; }
+    if (!Array.isArray(seg.pathNodes) || seg.pathNodes.length === 0) {
+      error(`多段触摸第 ${i + 1} 段缺少非空 pathNodes`, sp);
+    } else {
+      seg.pathNodes.forEach((node, j) => checkTouchPathNode(node, `${sp}.pathNodes[${j}]`));
+    }
+    if (typeof seg.duration !== 'number') error('多段触摸每一段必须有数字 duration', sp + '.duration');
+  });
+}
+
+/**
+ * 路径节点校验（TouchPathNode，自带来源）。
+ * 默认来源是 COORDINATE —— 老脚本可能整个 sourceType 都不写。
+ */
+function checkTouchPathNode(node, p) {
+  if (!isObj(node)) { error('路径节点必须是对象（TouchPathNode）', p); return; }
+  checkEnum(node.sourceType, TOUCH_TARGET_SOURCE_TYPES, 'sourceType', p);
+  const sourceType = node.sourceType === undefined ? 'COORDINATE' : node.sourceType;
+  if (sourceType === 'COORDINATE') {
+    // 坐标双写：像素与百分比都建议给（运行时 `xPct ∈ 0..1` 优先按百分比）
+    if (isSetPixel(node.x) && !isPercent(node.xPct)) {
+      warn('路径节点建议同时提供 xPct（0..1 百分比），只给像素换分辨率会偏', p);
+    }
+    if (isSetPixel(node.y) && !isPercent(node.yPct)) {
+      warn('路径节点建议同时提供 yPct（0..1 百分比），只给像素换分辨率会偏', p);
+    }
+  } else if (sourceType === 'VARIABLE') {
+    if (!isNonEmptyString(node.pointVarKey)) warn('VARIABLE 路径节点缺少 pointVarKey，运行时会回退静态兜底坐标', p);
+  } else if (sourceType === 'IMAGE' || sourceType === 'TEXT' || sourceType === 'COLOR') {
+    if (!isObj(node.condition)) warn(`${sourceType} 路径节点缺少 condition，运行时该点解析失败（动作会失败）`, p);
+  } else if (sourceType === 'NODE') {
+    if (!isObj(node.selector)) warn('NODE 路径节点缺少 selector，运行时该点解析失败（动作会失败）', p);
+  } else if (sourceType === 'TOUCH_DOWN') {
+    if (!isNonEmptyString(node.touchDownRefId)) warn('TOUCH_DOWN 路径节点缺少 touchDownRefId，找不到引用就无法解析该点', p);
+  }
 }
 
 /**
@@ -508,6 +643,28 @@ function checkNode(node, path, inStructural = false) {
       if (!touchDownRefs.has(a.touchDownRefId) && !nodeIds.has(a.touchDownRefId)) {
         warn(`move_pointer.touchDownRefId="${a.touchDownRefId}" 找不到对应 touch_down（可能引用节点 id 或 pointerId）`, p);
       }
+    }
+    // 触点路径里的 TOUCH_DOWN 节点引用（与 move_pointer 同口径：找不到只警告、不阻断）
+    if (a.type === 'single_touch' || a.type === 'multi_touch') {
+      const pointers = a.type === 'single_touch'
+        ? (isObj(a.pointer) ? [a.pointer] : [])
+        : (Array.isArray(a.pointers) ? a.pointers : []);
+      pointers.forEach((ptr, pi) => {
+        if (!isObj(ptr) || !Array.isArray(ptr.pathNodes)) return;
+        // 路径前缀精确到触点：single_touch 只有一个 pointer，multi_touch 按手指下标
+        const pointerPath = a.type === 'single_touch'
+          ? `${p}.action.pointer`
+          : `${p}.action.pointers[${pi}]`;
+        ptr.pathNodes.forEach((node, ni) => {
+          if (isObj(node) && node.sourceType === 'TOUCH_DOWN' && isNonEmptyString(node.touchDownRefId) &&
+              !touchDownRefs.has(node.touchDownRefId) && !nodeIds.has(node.touchDownRefId)) {
+            warn(
+              `路径节点 touchDownRefId="${node.touchDownRefId}" 找不到对应 touch_down（可能引用节点 id 或 pointerId）`,
+              `${pointerPath}.pathNodes[${ni}]`
+            );
+          }
+        });
+      });
     }
   }
 }

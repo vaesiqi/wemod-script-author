@@ -12,7 +12,7 @@ A **skill pack** for AI assistants (Reasonix / Claude Code and other tools that 
 
 | Engine | Coverage |
 |---|---|
-| Action model | 22 node kinds, all action types (key injection, Shell command, screenshot, AI vision / reply / agent included), `ActionConfig`, condition model, `NodeSelector`, virtual controls, full enum sets |
+| Action model | 19 node kinds, all action types (key injection, Shell command, screenshot, AI vision / reply / agent included), `ActionConfig`, condition model, `NodeSelector`, virtual controls, full enum sets |
 | Variable engine | Variable scopes, expression syntax with 100+ built-in functions, field resolution rules |
 | Execution engine | Lifecycle, control-flow semantics, soft / hard failures, run requirements, events, JS APIs |
 
