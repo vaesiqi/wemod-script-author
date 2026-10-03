@@ -29,7 +29,7 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 
 ## 1. 交付流程（五步）
 
-1. **澄清需求**：目标 App/页面、要完成的流程、循环条件、变量需求、是否需要虚拟控件/弹窗交互/网络/文件。缺关键信息就问（屏幕基准分辨率可默认 1080×2400）。
+1. **澄清需求**：目标 App/页面、要完成的流程、循环条件、变量需求、是否需要虚拟控件/弹窗交互/网络/文件；**作者归属必问**——社区用户 uid（数字）+ 昵称，写进 `publishMeta`（见 2.3，决定脚本导入后能不能发布到社区）。缺关键信息就问（屏幕基准分辨率可默认 1080×2400）。
 2. **结构设计**：画节点树——主流程块 + 循环（`repeat`/`while_var`/`while_vision`）+ 分支（`if`/`var_switch`）+ 子流程（`subflow_def`/`call_subflow`）+ 事件监听（`event_listener`）。需要用户可调参数 → 加 `consoleVariables` 面板变量。
 3. **编写 JSON**：按第 2~5 节填字段。默认值可省略（序列化 `encodeDefaults=false`，未知字段忽略，数值非法值可被导入器 coerce）。
 4. **静态自查**：按第 7 节清单逐项过一遍（引用目标存在、循环可退出、需求权限齐全、坐标双写）。
@@ -54,13 +54,17 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
   "baseScreenHeight": 2400,
   "confirmedCheckItems": [],
   "createdAt": 0,
-  "updatedAt": 0
+  "updatedAt": 0,
+  "publishMeta": {
+    "community_author_user_id": 12345,
+    "community_author_name": "作者昵称"
+  }
 }
 ```
 
 - `root.nodes` 是唯一必填执行体；`settings` 可省（有默认值）。`runCount=0` 表示无限次循环执行整个脚本。
 - 变量**没有**独立"变量区"：变量在节点树里用 `set_var`/`inc_var`/`get_var` 内联定义；控制台可调参数用顶层 `consoleVariables` 声明。
-- 其余顶层字段：`consolePresets`（控制台预设）、`virtualControls`/`virtualControlSchemes`（虚拟控件与布局方案）、`confirmedCheckItems`（运行前确认项）、`createdAt`/`updatedAt`；另有**发布/分享元数据字段**（`publishMeta`/`importedFromShare`/`encryptedSource`/`nodeCountHint`/`resolutionWarningSuppressed`）由 App 维护，手写脚本可全部省略。
+- 其余顶层字段：`consolePresets`（控制台预设）、`virtualControls`/`virtualControlSchemes`（虚拟控件与布局方案）、`confirmedCheckItems`（运行前确认项）、`createdAt`/`updatedAt`；另有**发布/分享元数据字段**（`publishMeta`/`importedFromShare`/`encryptedSource`/`nodeCountHint`/`resolutionWarningSuppressed`）。除 **`publishMeta.community_author_user_id` 必须由作者提供**（见 2.3）外，其余都由 App 维护、手写脚本可省略。
 - 序列化：判别字段统一为 **`"type"`**（sealed class 子类的 `@SerialName`），字段名即 Kotlin 属性名。必填字段 = 无默认值的字段。
 
 ### 2.2 最小可用脚本
@@ -82,6 +86,28 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
   ] }
 }
 ```
+
+### 2.3 作者归属与发布社区（`publishMeta`，**每次生成都必须问**）
+
+**规矩**：写脚本前必须问用户两件事——「你的社区用户 ID（数字 uid）」和「昵称」，然后写进脚本：
+
+```json
+"publishMeta": { "community_author_user_id": 12345, "community_author_name": "作者昵称" }
+```
+
+**为什么必须写**：我们的脚本是明文 JSON，用 App 打开导入时走「老格式」分支（`ScriptEnvelopeCodec.decodeFromShare`）——`importedFromShare = true`、信封里没有作者 ⇒ 本机脚本**没有作者归属**，脚本列表里就**不会出现「发布到社区」入口**。发布资格判据（`CommunityMainHostFacade.resolveLocalScriptPublishEntryState`）是：
+`(!importedFromShare && 作者为空) || 作者 == 当前登录用户`，另外还要求**官网渠道**（应用市场版不支持发布社区）+ 社区后端可用 + 已登录社区。
+
+**导入时作者从哪来**：`communityAuthorUserId = 信封 author_id ?: 脚本 JSON 里的 publishMeta.community_author_user_id`。信封作者优先，但**没有信封时就用脚本里写的值**——所以写在 JSON 里是生效的（这是"AI 产出的脚本导入后能否发布社区"的关键）。
+
+**拿 uid 的办法**：uid 是**数字**（不是用户名、不是昵称）。用户若不知道：在 App 登录社区后新建一个脚本 → 打开脚本详情 → 看到"作者：用户 #<uid>"，那串数字就是自己的 uid。
+
+**取值纪律（写错会伤到用户自己）**：
+
+- 必须是**用户本人账号**的 uid。写错或写成别人的 uid ⇒ 本机会把脚本当成别人的（含锁定节点的脚本自己无法编辑），发布入口也不会出现。
+- 只对自己原创的脚本写。用户拿来的是**他人分享/社区下载的脚本**时，**不要**写自己的 uid（那是冒认他人作品）。
+- 社区侧的作者由服务端按登录 token 决定，客户端写 uid 不会把作品冒名挂到别人名下；但上面的纪律仍必须守。
+- 用户明确不打算发社区、或确实给不出 uid ⇒ 可以留空，但**必须在交付说明里写明**：该脚本导入后，需要到「脚本详情页 → 作者 → 声明我是作者」声明归属，才能发布到社区（App 已提供该入口）。
 
 ## 3. 动作模型（节点 / 动作 / 配置 / 枚举）
 
@@ -573,6 +599,7 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 - [ ] 变量引用（表达式里的名字、VarKey 值、VarCondition.key）要么已定义、要么来自 `outputs` 绑定/面板变量；`scope` 只用 `LOCAL`/`GLOBAL`。
 - [ ] 条件项枚举拼写正确：`op`=LT/LE/EQ/NE/GE/GT；`action_run_status.status`=success/failure/not_run；`run_count_limit.resetMode`=loop_end/script_end/script_open。
 - [ ] 坐标双写：像素 `x/y` + 百分比 `xPct/yPct`（0~1 之间）；区域 `left/top/right/bottom` + `leftPct/topPct/rightPct/bottomPct`；虚拟控件给 `xPct/yPct`；**单指/多指要逐 pathNode 双写，`multi_tap`/`long_press`/`swipe`/`move_pointer`/`drag_to_target` 同理**。
+- [ ] **作者归属**：`publishMeta.community_author_user_id` 已按用户确认的**本人数字 uid** 填好（见 2.3）；若留空，交付说明里必须写明"导入后需在 App 脚本详情页「声明我是作者」才能发布社区"。
 - [ ] 运行需求齐备：有节点查找 → 提示无障碍；有视觉 → 提示屏幕录制；纯坐标可提示 Shizuku/root 可选。
 - [ ] `event_listener` 的 `async=true` 时目标非 LABEL；监听器不要自环指向自身（校验器会查）。
 - [ ] `run_code` 的 JS 只调上表命名空间（`runtime.variables/touch/vision/nodes/system/screen/network/files/process/crypto/cookies` 与全局 `console`）；**命名不是 `vars`/`sys`/`node`/`net`/`file`**；`http_request`/`file_action`/AI 视觉等一次性授权动作注意运行时授权弹窗。
@@ -589,6 +616,7 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 - ❌ 数组原地写 `arr[0]=x` / `arr.push(x)`（整体重建后 SetVar，追加用 `数组 + 值` / `concat` / `array(...)`）。
 - ❌ `Repeat.times <= 0` / 循环 `break` 出 `if`。
 - ❌ `single_touch`/`multi_touch` 写旧字段 `points`（虽能靠读时迁移导入，但新脚本一律用 `pathNodes`）；写了 `pathNodes` 却只给像素 `x/y` 不给 `xPct/yPct`（能跑，但换分辨率就偏，校验器会警告）。
+- ❌ 顶层写 `author` / `authorId` / `uploader` 之类的作者字段：模型里**没有**这些字段（会被当未知字段丢弃）。作者只存在于 `publishMeta.community_author_user_id`（Int）+ `community_author_name`（String）。
 - ❌ 不存在的动作/节点 `type`（上表之外的一律没有，如 `keyboard`/`sound`/`vibrate` 动作——vibrate 只存在于 Prompt 的 `vibrate` 布尔字段）。
 - ❌ 期望普通异常被 `try_catch` 捕获（只捕获 TryCatchAbortException 语义路径）。
 - ❌ 在 JS 里访问 Android 类（Rhino 无 JavaMembers 支持，会 NoClassDefFoundError——只能用 `runtime.*`）。

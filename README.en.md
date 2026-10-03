@@ -50,12 +50,18 @@ node tools/validate-script.mjs examples/auto-douyin-skin-001.axs
 
 # 2) validate your own script
 node tools/validate-script.mjs your-script.axs
-#    checks: JSON syntax / required fields / enum values / reference integrity / consoleVariables types
+#    checks: JSON syntax / required fields / enum values / reference integrity / consoleVariables types / author attribution
 
 # 3) ship it to the phone
 #    The script itself is JSON: rename it to .axs and open it with a file manager (or import inside the app)
 #    for a FULL import that keeps console variables / settings / virtual controls.
 #    Note: "paste JSON" in the editor only inserts nodes and drops top-level settings — full import must go through .axs.
+
+# 4) Want to publish to the script library (community)?
+#    The script needs "author attribution": put YOUR community user ID (a number) into the top-level
+#    publishMeta.community_author_user_id. Without it, an imported script gets no local author, so the
+#    "publish to community" entry will not show up; you can then claim it in the app via
+#    "script detail → author → claim as my work". See SKILL.md §2.3 (how to find your uid, and the rules).
 ```
 
 ## Exit codes of the validator (for scripting / CI)

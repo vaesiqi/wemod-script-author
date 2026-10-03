@@ -48,11 +48,16 @@ node tools/validate-script.mjs examples/auto-douyin-skin-001.axs
 
 # 2) 校验你自己的脚本
 node tools/validate-script.mjs 你的脚本.axs
-#    检查项：JSON 语法 / 必填字段 / 枚举值 / 引用完整性 / consoleVariables 类型
+#    检查项：JSON 语法 / 必填字段 / 枚举值 / 引用完整性 / consoleVariables 类型 / 作者归属
 
 # 3) 上手机
 #    脚本本体就是 JSON：改后缀为 .axs，用文件管理器打开（或在 App 内导入）→ 完整导入，保留控制台变量 / 设置 / 虚拟控件。
 #    注意：编辑器里的「粘贴 JSON」只插节点、不带顶层设置，完整导入必须走 .axs。
+
+# 4) 要发布到脚本库（社区）？
+#    脚本必须有「作者归属」：在顶层 publishMeta.community_author_user_id 填你自己的社区用户 ID（数字）。
+#    导入的脚本没有归属时，脚本列表里不会出现「发布到社区」入口；此时可在 App「脚本详情 → 作者 → 声明我是作者」补上。
+#    详见 SKILL.md §2.3（含"如何查自己的 uid"与取值纪律）。
 ```
 
 ## 版本与模型基准

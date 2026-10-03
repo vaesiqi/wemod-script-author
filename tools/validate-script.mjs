@@ -192,6 +192,8 @@ const NODE_REQUIRED = {
 
 const errors = [];
 const warnings = [];
+/** 提示（不计入警告数、不影响退出码）：见 [info] */
+const notes = [];
 const labelNames = new Set();
 /** 结构容器内部（if/循环/trycatch 等分支块内）的标签——引擎仅支持同结构内本层跳转，跨层跳入会失效 */
 const structuralLabels = new Set();
@@ -204,6 +206,14 @@ function error(msg, path) {
 }
 function warn(msg, path) {
   warnings.push(`${path ? '[' + path + '] ' : ''}${msg}`);
+}
+
+/**
+ * 提示（`ℹ`）：不写也能跑、但会让某项能力用不了的提醒 —— 不计入警告数、不影响退出码。
+ * 目前用于"未填作者 uid ⇒ 导入后无法发布到社区"（见 SKILL.md §2.3）。
+ */
+function info(msg, path) {
+  notes.push(`${path ? '[' + path + '] ' : ''}${msg}`);
 }
 function isObj(v) { return v !== null && typeof v === 'object' && !Array.isArray(v); }
 function has(obj, k) { return obj[k] !== undefined && obj[k] !== null; }
@@ -694,12 +704,68 @@ function checkScript(root) {
   if (typeof root.baseScreenWidth === 'string') error('baseScreenWidth 必须是数字', 'root.baseScreenWidth');
   if (typeof root.baseScreenHeight === 'string') error('baseScreenHeight 必须是数字', 'root.baseScreenHeight');
   if (root.consoleVariables) checkConsoleVariables(root.consoleVariables, 'consoleVariables');
+  checkPublishAuthor(root.publishMeta, 'publishMeta');
   checkNoPlainApiKey(root, 'root');
   if (!isObj(root.root) || !Array.isArray(root.root.nodes)) {
     error('root 必须是 { nodes: [...] } 结构', 'root.root');
     return;
   }
   root.root.nodes.forEach((n, i) => checkNode(n, `root.nodes[${i}]`));
+}
+
+/* ============ 作者归属 / 发布社区（S-脚本作者-1） ============ */
+
+/**
+ * 作者归属校验（边界：只查顶层 `publishMeta` 里与"能否发布社区"相关的两个字段）。
+ *
+ * 责任：① 拦住"作者 uid 类型写错"（模型是 `Int?`，写字符串/小数会让整脚本导入失败）；
+ * ② 用 `ℹ` 提示"没填作者"——AI 产出的明文 JSON 导入后 `importedFromShare` 必为 true，
+ * 本机没有作者归属时脚本列表不会出现「发布到社区」入口。
+ *
+ * 依据：发布资格 = `(!importedFromShare && 作者为空) || 作者 == 当前登录用户`
+ * （`CommunityMainHostFacade.resolveLocalScriptPublishEntryState`），详见 SKILL.md §2.3。
+ */
+function checkPublishAuthor(publishMeta, path) {
+  if (publishMeta === undefined || publishMeta === null) {
+    infoNoAuthor();
+    return;
+  }
+  if (!isObj(publishMeta)) {
+    error(`publishMeta 必须是对象（模型是 ScriptPublishMeta），当前是 ${describeType(publishMeta)}——导入会失败`, path);
+    return;
+  }
+  const authorUid = publishMeta.community_author_user_id;
+  if (authorUid !== undefined && authorUid !== null) {
+    if (typeof authorUid !== 'number' || !Number.isInteger(authorUid)) {
+      error(
+        `community_author_user_id 必须是整数（模型是 Int?），当前是 ${describeType(authorUid)}——导入会失败`,
+        path + '.community_author_user_id'
+      );
+    } else if (authorUid <= 0) {
+      warn(
+        'community_author_user_id <= 0：模型用 null 表示未设置，写 0/负数等于没填，导入后仍无作者归属',
+        path + '.community_author_user_id'
+      );
+    }
+  }
+  if (publishMeta.community_author_name !== undefined && publishMeta.community_author_name !== null &&
+      typeof publishMeta.community_author_name !== 'string') {
+    error(
+      `community_author_name 必须是字符串，当前是 ${describeType(publishMeta.community_author_name)}`,
+      path + '.community_author_name'
+    );
+  }
+  const hasUid = typeof authorUid === 'number' && Number.isInteger(authorUid) && authorUid > 0;
+  if (!hasUid) infoNoAuthor();
+}
+
+/** "未填作者"提示文案（三处共用，避免文案漂移） */
+function infoNoAuthor() {
+  info(
+    '未填写 publishMeta.community_author_user_id：脚本导入后本机没有作者归属，' +
+      '脚本列表不会出现「发布到社区」入口（可在 App 脚本详情页点「声明我是作者」，' +
+      '或让用户提供自己的社区 uid 后写入 publishMeta）'
+  );
 }
 
 /* ============ 安全：明文 API Key 拦截（S1450） ============ */
@@ -792,6 +858,10 @@ const exitErrors = strict ? errors : errors; // 错误总是阻断
 console.log('──────── 校验报告 ────────');
 console.log(`脚本: ${parsed.name} (id=${parsed.id})`);
 console.log(`节点树: ${labelNames.size} 个标签, ${nodeIds.size} 个带 id 节点, ${subflowNames.size} 个子流程`);
+if (notes.length) {
+  console.log(`\nℹ 提示 ${notes.length} 条（不影响导入/运行）:`);
+  notes.forEach((n) => console.log(`  - ${n}`));
+}
 if (warnings.length) {
   console.log(`\n⚠ 警告 ${warnings.length} 条:`);
   warnings.forEach((w) => console.log(`  - ${w}`));
