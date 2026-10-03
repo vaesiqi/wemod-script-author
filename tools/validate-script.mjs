@@ -415,6 +415,18 @@ function isNonEmptyString(v) {
   return typeof v === 'string' && v.trim() !== '';
 }
 
+/** 单条字段是否填了"真值"：空串 / null / 空数组 / 空对象算占位（用 items 时的推荐写法），不算真值 */
+function hasRealValue(v) {
+  if (v === undefined || v === null) return false;
+  if (typeof v === 'string') return v.trim() !== '';
+  if (Array.isArray(v)) return v.length > 0;
+  if (isObj(v)) {
+    if (typeof v.expression === 'string') return v.expression.trim() !== '';
+    return Object.keys(v).length > 0;
+  }
+  return true; // 数字 / 布尔等字面量
+}
+
 /**
  * 表驱动的坐标双写提示：只对「给了有效像素值、却没给百分比」的动作报警告。
  * 单指/多指不在表内（它们是触点里的 pathNodes，逐节点判定见 [checkTouchPathNode]）。
@@ -540,15 +552,15 @@ function checkVariableItems(node, hostType, path) {
   if (items === undefined) return;
   if (!Array.isArray(items)) { error('items 必须是数组', path + '.items'); return; }
   if (items.length === 0) return;
-  // 单条字段被忽略的提示（模型要求它们仍必须存在，故只提示不报错）
-  if (hostType === 'set_var' && (has(node, 'key') || has(node, 'value'))) {
-    warn('set_var 的 items 非空 → 单条 key/value 会被忽略（为满足模型必填仍需存在，可留空串）', path);
+  // 单条字段「填了真值」才会被忽略 → 只有这种冗余填法才提示（"留空串占位"是推荐写法，不提示）
+  if (hostType === 'set_var' && (isNonEmptyString(node.key) || hasRealValue(node.value))) {
+    warn('set_var 的 items 非空 → 单条 key/value 会被忽略（推荐留空串占位如 "key":"","value":""）', path);
   }
-  if (hostType === 'inc_var' && has(node, 'key')) {
-    warn('inc_var 的 items 非空 → 单条 key/delta 会被忽略（仍需存在，可留空串）', path);
+  if (hostType === 'inc_var' && isNonEmptyString(node.key)) {
+    warn('inc_var 的 items 非空 → 单条 key/delta 会被忽略（推荐留空串占位如 "key":""）', path);
   }
-  if (hostType === 'get_var' && (has(node, 'sourceKey') || has(node, 'targetKey'))) {
-    warn('get_var 的 items 非空 → 单条 sourceKey/targetKey 会被忽略（仍需存在，可留空串）', path);
+  if (hostType === 'get_var' && (isNonEmptyString(node.sourceKey) || isNonEmptyString(node.targetKey))) {
+    warn('get_var 的 items 非空 → 单条 sourceKey/targetKey 会被忽略（推荐留空串占位）', path);
   }
   items.forEach((it, i) => {
     const ip = path + '.items[' + i + ']';
@@ -711,6 +723,56 @@ function checkScript(root) {
     return;
   }
   root.root.nodes.forEach((n, i) => checkNode(n, `root.nodes[${i}]`));
+  checkVariableBatching(root.root.nodes, 'root.nodes');
+}
+
+/* ============ 变量批量合并提示（`items` 写法护栏） ============ */
+
+/**
+ * 连续变量节点提示：**同一处**（同一个 nodes 数组里相邻）连续 ≥3 个变量节点、且都没用 `items` 时，
+ * 提示"可合并为一个节点 + items 一次执行"。
+ *
+ * 为什么用 `ℹ` 而不是警告：逐个写也能跑，只是节点多、日志吵、后续改动要逐个找。
+ * 阈值取 ≥3 是为了避开噪声（2 个相邻变量节点很常见，例如"设 flag → 设计数"）。
+ * 依据：`SetVar`/`IncVar`/`GetVar` 都支持 `items`（非空时逐条执行、优先于单条字段），见 SKILL.md §4.3。
+ */
+function checkVariableBatching(nodes, path) {
+  if (!Array.isArray(nodes)) return;
+  const isVarNode = (n) => isObj(n) && (n.type === 'set_var' || n.type === 'inc_var' || n.type === 'get_var');
+  const usesItems = (n) => Array.isArray(n.items) && n.items.length > 0;
+  let i = 0;
+  while (i < nodes.length) {
+    if (isVarNode(nodes[i]) && !usesItems(nodes[i])) {
+      let j = i;
+      while (j + 1 < nodes.length && isVarNode(nodes[j + 1]) && !usesItems(nodes[j + 1])) j++;
+      const len = j - i + 1;
+      if (len >= 3) {
+        const keys = nodes.slice(i, j + 1).map((n) => n.key ?? n.sourceKey ?? '?').join('、');
+        info(
+          `同一处连续 ${len} 个变量节点（${keys}）建议合并为一个节点 + items 一次执行（见技能 §4.3）`,
+          `${path}[${i}..${j}]`
+        );
+      }
+      i = j + 1;
+    } else {
+      i++;
+    }
+  }
+  // 递归进各分支块
+  nodes.forEach((n, idx) => {
+    if (!isObj(n)) return;
+    for (const key of ['block', 'thenBlock', 'elseBlock', 'tryBlock', 'catchBlock', 'leftBlock', 'rightBlock', 'defaultBlock']) {
+      const b = n[key];
+      if (isObj(b) && Array.isArray(b.nodes)) checkVariableBatching(b.nodes, `${path}[${idx}].${key}.nodes`);
+    }
+    if (Array.isArray(n.cases)) {
+      n.cases.forEach((c, ci) => {
+        if (isObj(c) && isObj(c.block) && Array.isArray(c.block.nodes)) {
+          checkVariableBatching(c.block.nodes, `${path}[${idx}].cases[${ci}].block.nodes`);
+        }
+      });
+    }
+  });
 }
 
 /* ============ 作者归属 / 发布社区（S-脚本作者-1） ============ */

@@ -26,13 +26,14 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
   - 节点查找类动作（`node_*`/`find_and_*`/`wait_node` 等）**依赖无障碍服务**；纯坐标动作可走 Shizuku/root。
   - 视觉类动作（`*vision*`/`click_color`/`click_text`/`click_image`/`scroll_until_vision`）**依赖屏幕录制（MediaProjection）**。
   - 写脚本时所有坐标/区域**同时给像素值（`x/y`）和百分比（`xPct/yPct`）**：运行时 `xPct` 在 `0f..1f` 时优先按百分比×当前屏幕，否则回退像素值；`xPct=-1f` 表示"未设置"。**单指/多指手势的每个路径节点也照此双写**（见 3.2.1）。
+  - **多个变量一律合并**：同一处要初始化/修改/拷贝多个变量时，**必须写成一个变量节点 + `items`**（`set_var`/`inc_var`/`get_var` 都支持，条目还能混用 set/inc/get），**不要串成一排同名节点**（见 4.3）——逐个 `set_var` 是最常见的退化写法。
 
 ## 1. 交付流程（五步）
 
 1. **澄清需求**：目标 App/页面、要完成的流程、循环条件、变量需求、是否需要虚拟控件/弹窗交互/网络/文件；**作者归属必问**——社区用户 uid（数字）+ 昵称，写进 `publishMeta`（见 2.3，决定脚本导入后能不能发布到社区）。缺关键信息就问（屏幕基准分辨率可默认 1080×2400）。
 2. **结构设计**：画节点树——主流程块 + 循环（`repeat`/`while_var`/`while_vision`）+ 分支（`if`/`var_switch`）+ 子流程（`subflow_def`/`call_subflow`）+ 事件监听（`event_listener`）。需要用户可调参数 → 加 `consoleVariables` 面板变量。
-3. **编写 JSON**：按第 2~5 节填字段。默认值可省略（序列化 `encodeDefaults=false`，未知字段忽略，数值非法值可被导入器 coerce）。
-4. **静态自查**：按第 7 节清单逐项过一遍（引用目标存在、循环可退出、需求权限齐全、坐标双写）。
+3. **编写 JSON**：按第 2~5 节填字段。默认值可省略（序列化 `encodeDefaults=false`，未知字段忽略，数值非法值可被导入器 coerce）。**同一处的多个变量赋值/自增/拷贝合并成一个节点 + `items`**（见 4.3），不要串成一排变量节点。
+4. **静态自查**：按第 7 节清单逐项过一遍（引用目标存在、循环可退出、需求权限齐全、坐标双写、**变量已按 items 合并**）。
 5. **离线预检**：`node tools/validate-script.mjs <脚本.axs>` 跑一遍校验器，零错误才交付。
 6. **交付**：输出完整 JSON + 一句话说明（运行需求：无障碍/Shizuku/root/屏幕捕获；导入方式：改后缀 `.axs` 用 App 打开导入）。
 
@@ -401,7 +402,9 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 2. **VarKey 字段直填**：所有 `*VarKey` 后缀字段（约 60 个，如 `millisVarKey/pointVarKey/durationVarKey/timeoutMsVarKey/inputTextVarKey`）非空时优先于固定值，支持变量名/索引/表达式。统一解析优先级（`resolveRuntimeField`）：`=`前缀显式表达式 → 表达式特征自动识别(`arr[0]`/`at(arr,i+1)`/`1+2`) → 变量直查 → 原字符串兜底。**求值失败自动回退**，旧脚本安全。
 3. **Prompt 模板 `${...}`**：`${name}` 先变量直查再表达式；`${=表达式}` 强制表达式；支持 `${识别框数组[0]}`、`${=轮次 + 1}`。
 
-### 4.3 SetVar 的 `value` 四形态 + 多变量 `items`
+### 4.3 变量赋值形态 + 多变量 `items`（**多个变量一律合并写**）
+
+**单条形态**（只动一个变量时用；`value` 四形态）：
 
 ```json
 { "type": "set_var", "key": "count", "value": 42 }
@@ -427,6 +430,29 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 
 - `VariableItem` 字段：`type`(`set`/`inc`/`get`，可省)、`key`、`value`(JsonElement，SET 用)、`delta`(INC 用，默认 1.0)、`sourceKey`(GET 用)、`scope`(默认 LOCAL)。
 - ⚠️ **宿主节点的 `key`/`value`（GetVar 为 `sourceKey`/`targetKey`）在模型里无默认值 → 用 items 时也必须带上（留空串占位如 `"key":""`），否则严格反序列化（`.axs` 导入）会报缺字段**；它们会被忽略，实际执行以 items 为准。
+
+**推荐写法：同一个地方要动多个变量 → 一个节点 + `items`（不要堆一排变量节点）**
+
+❌ 退化写法（3 个节点：每个单独执行、日志 3 行、以后要改得逐个找）：
+
+```json
+{ "type": "set_var", "key": "已答列表", "value": [] }
+{ "type": "set_var", "key": "连续未中", "value": 0 }
+{ "type": "set_var", "key": "连续已答轮数", "value": 0 }
+```
+
+✅ 推荐写法（1 个节点：数组顺序即执行顺序，语义等价，还能混 set/inc/get）：
+
+```json
+{ "type": "set_var", "comment": "初始化统计变量", "key": "", "value": "", "items": [
+    { "type": "set", "key": "已答列表", "value": [] },
+    { "type": "set", "key": "连续未中", "value": 0 },
+    { "type": "set", "key": "连续已答轮数", "value": 0 }
+] }
+```
+
+- 什么时候**不要**合并：这些变量操作之间夹着其它动作（如「设 flag → 点击 → 再改 flag」），或分处不同分支/循环体 —— 那就不是"同一处"，各自独立成节点。
+- 循环体里"每轮重置多个计数器/统计量"同样用 items（循环体开头放一个节点）。
 
 ### 4.4 表达式语法（VariableExpressionEngine）
 
@@ -588,6 +614,7 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 6. **事件驱动**：动作 `config.events.onFail` 绑子流程做异常上报/告警；全局 `event_listener` 监听某动作成功事件跳转。
 7. **虚拟控件做挂机**：`virtual_button` + `triggerVarKey` 变量（由 `run_code`/变量面板驱动）或 `trigger_virtual_button` 动作直接触发。
 8. **防检测**：`config.coordJitterMinPx/MaxPx` 加随机抖动；`preDelayRandomRangeMs` 随机前置延迟。
+9. **变量批量操作**：同一处要对多个变量赋值/自增/拷贝 → **一个节点 + `items`**（条目可混 set/inc/get，见 4.3），**不要堆一排 `set_var`**；循环体里"每轮重置多个统计量"也照此写。
 
 ## 7. 交付自查清单（对 ScriptValidator 规则逐项）
 
@@ -597,6 +624,7 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 - [ ] `goto.target` 与 `event_listener`/`run_control` 引用的 label/节点 id/子流程 name 都存在（最近作用域优先，支持向上冒泡；**不能跳进子块/子流程内部**）。
 - [ ] `touch_down` 的 pointerId 有对应 `touch_up`（`move_pointer.touchDownRefId` 引用存在），避免卡指。
 - [ ] 变量引用（表达式里的名字、VarKey 值、VarCondition.key）要么已定义、要么来自 `outputs` 绑定/面板变量；`scope` 只用 `LOCAL`/`GLOBAL`。
+- [ ] **变量批量合并**：同一处对多个变量赋值/自增/拷贝时用**一个节点 + `items`**（不要一排 `set_var` 节点，见 4.3）；用 items 时宿主 `key`/`value`（`get_var` 为 `sourceKey`/`targetKey`）仍需占位（可空串），否则 `.axs` 严格导入报缺字段；`items` 条目里 `type` 可省（按宿主类型），也可显式混用 set/inc/get。
 - [ ] 条件项枚举拼写正确：`op`=LT/LE/EQ/NE/GE/GT；`action_run_status.status`=success/failure/not_run；`run_count_limit.resetMode`=loop_end/script_end/script_open。
 - [ ] 坐标双写：像素 `x/y` + 百分比 `xPct/yPct`（0~1 之间）；区域 `left/top/right/bottom` + `leftPct/topPct/rightPct/bottomPct`；虚拟控件给 `xPct/yPct`；**单指/多指要逐 pathNode 双写，`multi_tap`/`long_press`/`swipe`/`move_pointer`/`drag_to_target` 同理**。
 - [ ] **作者归属**：`publishMeta.community_author_user_id` 已按用户确认的**本人数字 uid** 填好（见 2.3）；若留空，交付说明里必须写明"导入后需在 App 脚本详情页「声明我是作者」才能发布社区"。

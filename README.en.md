@@ -35,6 +35,7 @@ wemod-script-author/
 │   ├── vision-loop-retry-001.axs      # vision loop with retry: wait_for_vision + outputs to variables + events.onTimeout jump
 │   ├── branch-conditions-001.axs      # branches and loops: if + condition groups (ALL / N_OF) + var_switch + while_var + while_vision
 │   ├── notification-trigger-001.axs   # notification trigger: run a subflow when a matching notification arrives
+│   ├── variables-batch-items-001.axs  # batching variables: one node + items to set/inc/copy many variables at once
 │   └── window-trigger-001.axs         # window trigger: run when the target window appears
 ├── tools/
 │   └── validate-script.mjs     # offline validator (runs on node; no Android / source needed)
@@ -62,6 +63,13 @@ node tools/validate-script.mjs your-script.axs
 #    publishMeta.community_author_user_id. Without it, an imported script gets no local author, so the
 #    "publish to community" entry will not show up; you can then claim it in the app via
 #    "script detail → author → claim as my work". See SKILL.md §2.3 (how to find your uid, and the rules).
+
+# 5) Writing conventions the skill itself enforces:
+#    · Multiple variables in one place must be merged into ONE node + items (set_var / inc_var / get_var all support it;
+#      items may mix set/inc/get). Do not stack a row of set_var nodes; leave the host key/value as empty-string
+#      placeholders ("key": "", "value": ""). Example: examples/variables-batch-items-001.axs, docs: SKILL.md §4.3.
+#    · The validator emits an ℹ hint for "3+ consecutive variable nodes in one place" (mergeable) — it never blocks
+#      and is not counted as a warning.
 ```
 
 ## Exit codes of the validator (for scripting / CI)

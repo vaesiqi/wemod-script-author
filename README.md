@@ -35,6 +35,7 @@ wemod-script-author/
 │   ├── vision-loop-retry-001.axs      # 图色识别循环重试：wait_for_vision + outputs 写变量 + events.onTimeout 回跳标签
 │   ├── branch-conditions-001.axs      # 条件分支与循环：if + 条件组（ALL / N_OF）+ var_switch + while_var + while_vision
 │   ├── notification-trigger-001.axs   # 通知触发：收到指定内容通知时执行子流程
+│   ├── variables-batch-items-001.axs  # 变量批量操作：1 个节点 + items 一次定义/自增/拷贝多个变量（条目可混 set/inc/get）
 │   └── window-trigger-001.axs         # 窗口触发：指定窗口出现时执行
 └── tools/
     └── validate-script.mjs      # 离线校验器（node 运行，不依赖 Android / 源码）
@@ -58,6 +59,12 @@ node tools/validate-script.mjs 你的脚本.axs
 #    脚本必须有「作者归属」：在顶层 publishMeta.community_author_user_id 填你自己的社区用户 ID（数字）。
 #    导入的脚本没有归属时，脚本列表里不会出现「发布到社区」入口；此时可在 App「脚本详情 → 作者 → 声明我是作者」补上。
 #    详见 SKILL.md §2.3（含"如何查自己的 uid"与取值纪律）。
+
+# 5) 写脚本时的写法规范（技能正文会自动引导）：
+#    · 同一处的多个变量必须合并成一个节点 + items（set_var / inc_var / get_var 都支持，条目可混 set/inc/get），
+#      不要堆一排 set_var；宿主 key/value 留空串占位即可（"key":"", "value":""）。
+#      范例：examples/variables-batch-items-001.axs，说明：SKILL.md §4.3。
+#    · 校验器会对「同一处连续 ≥3 个变量节点」给出 ℹ 提示（可合并），不阻断、不计入警告数。
 ```
 
 ## 版本与模型基准
