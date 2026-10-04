@@ -45,6 +45,15 @@ const ACTION_TYPES = new Set([
 ]);
 
 const VISION_TYPES = new Set(['color_at', 'color_region', 'text_exists', 'template_match']);
+
+/** 颜色命中规则（ColorMatchMode，多点比色/找色与颜色集合共用） */
+const COLOR_MATCH_MODES = new Set(['ANY', 'ALL', 'N_OF']);
+
+/** 颜色区域匹配模式（ColorRegionMatchMode）：FIND_TARGETS + points 非空 = 多点找色 */
+const COLOR_REGION_MATCH_MODES = new Set(['REGION_MATCH', 'FIND_TARGETS']);
+
+/** 找色扫描/返回方向（ColorFindDirection） */
+const COLOR_FIND_DIRECTIONS = new Set(['TOP_LEFT', 'TOP_RIGHT', 'BOTTOM_LEFT', 'BOTTOM_RIGHT']);
 const CONDITION_ITEM_TYPES = new Set([
   'vision', 'time', 'variable', 'expression', 'action_run_status',
   'screen_on', 'screen_locked', 'node', 'run_count_limit',
@@ -231,10 +240,26 @@ function checkVisionCondition(cond, path) {
   if (!VISION_TYPES.has(type)) { error(`视觉条件 type "${type}" 非法`, path); return; }
   if (type === 'color_at') {
     for (const f of ['x', 'y', 'color']) if (!has(cond, f)) error(`color_at 缺少必填字段 ${f}`, path);
-    checkEnum(cond.colorMatchMode, new Set(['ANY', 'ALL', 'N_OF']), 'colorMatchMode', path);
+    // 多点比色（S-手势面板-5T12）：color_at 没有 colorMatchMode，采样点规则用 pointsMatchMode + requiredMatchCount
+    checkEnum(cond.pointsMatchMode, COLOR_MATCH_MODES, 'pointsMatchMode', path);
+    checkColorAtPoints(cond.points, path);
+    checkPointsRequiredCount(cond, path, 'requiredMatchCount', Array.isArray(cond.points) ? cond.points.length : 0);
   } else if (type === 'color_region') {
     for (const f of ['left', 'top', 'right', 'bottom', 'color']) if (!has(cond, f)) error(`color_region 缺少必填字段 ${f}`, path);
-    checkEnum(cond.colorMatchMode, new Set(['ANY', 'ALL', 'N_OF']), 'colorMatchMode', path);
+    checkEnum(cond.colorMatchMode, COLOR_MATCH_MODES, 'colorMatchMode', path);
+    // 多点找色（S-手势面板-5T24）：matchMode=FIND_TARGETS 且 points 非空才进入
+    checkEnum(cond.matchMode, COLOR_REGION_MATCH_MODES, 'matchMode', path);
+    checkEnum(cond.pointsMatchMode, COLOR_MATCH_MODES, 'pointsMatchMode', path);
+    checkEnum(cond.findDirection, COLOR_FIND_DIRECTIONS, 'findDirection', path);
+    const pointCount = checkColorAtPoints(cond.points, path);
+    checkPointsRequiredCount(cond, path, 'pointsRequiredMatchCount', pointCount);
+    if (pointCount > 0 && cond.matchMode !== 'FIND_TARGETS') {
+      info(
+        'color_region 的 points 非空但 matchMode 不是 "FIND_TARGETS"：多点找色只在 `matchMode="FIND_TARGETS"` 时生效，' +
+          '当前写法下这些采样点会被忽略（默认 matchMode=REGION_MATCH）',
+        path
+      );
+    }
   } else if (type === 'text_exists') {
     for (const f of ['left', 'top', 'right', 'bottom', 'text']) if (!has(cond, f)) error(`text_exists 缺少必填字段 ${f}`, path);
     checkEnum(cond.textMatchMode, new Set(['ANY', 'ALL', 'N_OF']), 'textMatchMode', path);
@@ -251,8 +276,64 @@ function checkVisionCondition(cond, path) {
       });
     }
   }
-  if (type !== 'template_match' && cond.color !== undefined && typeof cond.color === 'number') {
-    // color 为 Int ARGB（可为负数补码），数值类型即可
+  if (type !== 'template_match' && cond.color !== undefined && typeof cond.color !== 'number') {
+    error('color 必须是数字（ARGB Int，可用负补码）', path);
+  }
+}
+
+/**
+ * 多点比色 / 多点找色共用的采样点校验（S-手势面板-5T12 / 5T24）。
+ *
+ * 边界：只校验 `ColorAtPoint` 数组的形状与取值范围；责任：拦住
+ * ① 采样点容差为负、② `N_OF` 的 N 超过采样点数（App 内运行时校验器直接判 ERROR 的两类），
+ * ③ 百分比偏移写成绝对屏幕百分比（真机表现为"锚点换位置后采样点钉死"），
+ * ④ 类型写错导致整脚本导入失败。
+ *
+ * @returns 采样点数量（调用方据此给 `matchMode` 相关提示）
+ */
+function checkColorAtPoints(points, path) {
+  if (points === undefined || points === null) return 0;
+  if (!Array.isArray(points)) {
+    error(`points 必须是数组（元素为 ColorAtPoint）`, path + '.points');
+    return 0;
+  }
+  points.forEach((p, i) => {
+    const pp = `${path}.points[${i}]`;
+    if (!isObj(p)) { error('points 的每一项必须是对象（ColorAtPoint）', pp); return; }
+    for (const f of ['dx', 'dy', 'color', 'tolerance']) {
+      if (p[f] !== undefined && typeof p[f] !== 'number') {
+        error(`points[${i}].${f} 必须是数字`, pp);
+      }
+    }
+    if (typeof p.tolerance === 'number' && p.tolerance < 0) {
+      error(`points[${i}].tolerance 不能小于 0（App 内校验器会判 ERROR；<=0 表示沿用锚点容差）`, pp);
+    }
+    for (const f of ['dxPct', 'dyPct']) {
+      const v = p[f];
+      if (v === undefined) continue;
+      if (typeof v !== 'number') { error(`points[${i}].${f} 必须是数字（未设置写哨兵 -2）`, pp); continue; }
+      if (v !== -2 && (v < -1 || v > 1)) {
+        warn(
+          `points[${i}].${f}=${v} 超出 (-1,1)：它是**相对锚点**的百分比偏移（未设置写哨兵 -2）。` +
+            '相对偏移通常是很小的比例（如 0.02 ≈ 20px/1080），写成绝对屏幕百分比或误填大值都会让采样点偏掉',
+          pp
+        );
+      }
+    }
+    if (!has(p, 'color')) warn(`points[${i}] 缺少 color（该处应有的颜色，ARGB Int）`, pp);
+  });
+  return points.length;
+}
+
+/** N_OF 的 N 范围校验（多点比色/找色共用；N 必须落在 1~采样点数之间） */
+function checkPointsRequiredCount(cond, path, nField, count) {
+  if (cond.pointsMatchMode !== 'N_OF') return;
+  const n = cond[nField];
+  if (typeof n !== 'number' || n < 1 || n > count) {
+    error(
+      `pointsMatchMode=N_OF 时 ${nField} 必须在 1~采样点数之间（当前 ${n}，采样点 ${count}）`,
+      path
+    );
   }
 }
 

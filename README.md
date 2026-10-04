@@ -36,6 +36,7 @@ wemod-script-author/
 │   ├── branch-conditions-001.axs      # 条件分支与循环：if + 条件组（ALL / N_OF）+ var_switch + while_var + while_vision
 │   ├── notification-trigger-001.axs   # 通知触发：收到指定内容通知时执行子流程
 │   ├── variables-batch-items-001.axs  # 变量批量操作：1 个节点 + items 一次定义/自增/拷贝多个变量（条目可混 set/inc/get）
+│   ├── color-multi-point-001.axs      # 多点比色 / 多点找色：color_at.points 与 color_region（FIND_TARGETS + points + findDirection）→ 命中点写变量再点击
 │   └── window-trigger-001.axs         # 窗口触发：指定窗口出现时执行
 └── tools/
     └── validate-script.mjs      # 离线校验器（node 运行，不依赖 Android / 源码）
@@ -65,6 +66,11 @@ node tools/validate-script.mjs 你的脚本.axs
 #      不要堆一排 set_var；宿主 key/value 留空串占位即可（"key":"", "value":""）。
 #      范例：examples/variables-batch-items-001.axs，说明：SKILL.md §4.3。
 #    · 校验器会对「同一处连续 ≥3 个变量节点」给出 ℹ 提示（可合并），不阻断、不计入警告数。
+#    · 多点比色 / 多点找色：采样点是 ColorAtPoint（dx/dy 像素偏移，或 dxPct/dyPct **相对锚点**的百分比偏移，
+#      未设置写哨兵 -2）；比色用 color_at.points + pointsMatchMode + requiredMatchCount，
+#      找色必须在 color_region 上写 matchMode="FIND_TARGETS" 再给 points + pointsMatchMode + pointsRequiredMatchCount
+#      （默认 REGION_MATCH 时 points 不生效）；命中点走 outputs.pointVar，可直接给 tap 的 pointVarKey。
+#      范例：examples/color-multi-point-001.axs，说明：SKILL.md §3.5.1。
 ```
 
 ## 版本与模型基准

@@ -36,6 +36,7 @@ wemod-script-author/
 │   ├── branch-conditions-001.axs      # branches and loops: if + condition groups (ALL / N_OF) + var_switch + while_var + while_vision
 │   ├── notification-trigger-001.axs   # notification trigger: run a subflow when a matching notification arrives
 │   ├── variables-batch-items-001.axs  # batching variables: one node + items to set/inc/copy many variables at once
+│   ├── color-multi-point-001.axs      # multi-point color: color_at.points and color_region (FIND_TARGETS + points + findDirection) → hit point into a variable, then tap it
 │   └── window-trigger-001.axs         # window trigger: run when the target window appears
 ├── tools/
 │   └── validate-script.mjs     # offline validator (runs on node; no Android / source needed)
@@ -70,6 +71,13 @@ node tools/validate-script.mjs your-script.axs
 #      placeholders ("key": "", "value": ""). Example: examples/variables-batch-items-001.axs, docs: SKILL.md §4.3.
 #    · The validator emits an ℹ hint for "3+ consecutive variable nodes in one place" (mergeable) — it never blocks
 #      and is not counted as a warning.
+#    · Multi-point color check / search: each sample point is a ColorAtPoint (dx/dy pixel offsets, or dxPct/dyPct
+#      as %-offsets RELATIVE TO THE ANCHOR — use the sentinel -2 when unset). For "multi-point color check" use
+#      color_at.points + pointsMatchMode + requiredMatchCount; for "multi-point color search" you MUST set
+#      color_region.matchMode = "FIND_TARGETS" and then points + pointsMatchMode + pointsRequiredMatchCount
+#      (with the default REGION_MATCH the points are ignored). The hit point is written via outputs.pointVar and can
+#      be fed straight into tap.pointVarKey.
+#      Example: examples/color-multi-point-001.axs, docs: SKILL.md §3.5.1.
 ```
 
 ## Exit codes of the validator (for scripting / CI)

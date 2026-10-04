@@ -154,7 +154,7 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 | `swipe` | Swipe | **fromX,fromY,toX,toY**（+ fromXPct/fromYPct/toXPct/toYPct）、duration=300、useBezierCurve=false、bezierCurveFactor；起点/终点可来自 IMAGE/TEXT/COLOR（fromSourceType/toSourceType） |
 | `single_touch` | SingleTouch | **pointer**(TouchPointer：**pathNodes 路径节点数组**、duration、pathType=POINT/LINE/POLYLINE/RECORD/CURVE、segments 多段)；见 3.2.1 |
 | `multi_touch` | MultiTouch | **pointers:List\<TouchPointer\>**（多指轨迹，每根手指一套 pathNodes）；见 3.2.1 |
-| `click_color` | ClickColor | **condition**(ColorAt)、outputs |
+| `click_color` | ClickColor | **condition**(ColorAt；可用 3.5.1 **多点比色**：`points` 附加采样点)、outputs |
 | `click_text` | ClickText | **condition**(TextExists)、outputs |
 | `click_image` | ClickImage | **condition**(TemplateMatch)、outputs |
 
@@ -245,7 +245,7 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 | type | 类 | 关键字段 |
 |---|---|---|
 | `scroll_until_vision` | ScrollUntilVision | **condition**、maxScrolls=10、direction、swipeDuration=300 |
-| `wait_for_vision` | WaitForVision | **condition**、timeoutMillis=null、outputs |
+| `wait_for_vision` | WaitForVision | **condition**、timeoutMillis=null、outputs（条件可为 `color_region` + 3.5.1 **多点找色**：命中点写 `outputs.pointVar`，再给 `tap` 的 `pointVarKey` 用） |
 | `check_vision` | CheckVision | **condition**、outputs（单次，无条件继续） |
 **网络/系统/文件/运行控制**：
 
@@ -357,12 +357,70 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 
 | type | 必填 | 关键参数 |
 |---|---|---|
-| `color_at` | x,y,color(ARGB Int) | tolerance=10、sampleRadius=0、sampleMode=CENTER/CROSS/SQUARE、**hitThreshold=1**、similarity=1f、colorVarKey、elementRef、preprocess |
-| `color_region` | left,top,right,bottom,color | **colors:List<Int>（附加颜色，与主色并集判定）**、**colorVarKeys:List<String>（附加颜色「从变量读」，与 colors 平行，非空时该变量值覆盖对应位置颜色）**、**colorMatchMode=ANY/ALL/N_OF + requiredMatchCount + trackingEnabled（命中后写回 regionVarKey）**、matchMode=REGION_MATCH/FIND_TARGETS、tolerance=10、sampleStep=6、hitRatio=1f、requireAverageMatch=true、earlyAccept/earlyReject=true、similarity=1f、colorVarKey、elementRef、preprocess |
+| `color_at` | x,y,color(ARGB Int) | tolerance=10、sampleRadius=0、sampleMode=CENTER/CROSS/SQUARE、**hitThreshold=1**、similarity=1f、colorVarKey、elementRef、preprocess；**多点比色：`points:List<ColorAtPoint>`（相对锚点的附加采样点）+ `pointsMatchMode=ANY/ALL/N_OF` + `requiredMatchCount`（见 3.5.1）** |
+| `color_region` | left,top,right,bottom,color | **colors:List<Int>（附加颜色，与主色并集判定）**、**colorVarKeys:List<String>（附加颜色「从变量读」，与 colors 平行，非空时该变量值覆盖对应位置颜色）**、**colorMatchMode=ANY/ALL/N_OF + requiredMatchCount + trackingEnabled（命中后写回 regionVarKey）**、matchMode=REGION_MATCH/FIND_TARGETS、tolerance=10、sampleStep=6、hitRatio=1f、requireAverageMatch=true、earlyAccept/earlyReject=true、similarity=1f、colorVarKey、elementRef、preprocess；**多点找色（见 3.5.1）：`points:List<ColorAtPoint>`（`matchMode="FIND_TARGETS"` 且非空时进入）+ `pointsMatchMode` + `pointsRequiredMatchCount` + 锚点 `anchorX/anchorY/anchorXPct/anchorYPct` + `findDirection=TOP_LEFT/TOP_RIGHT/BOTTOM_LEFT/BOTTOM_RIGHT`（区域扫描顺序，决定同画面多个目标"先返回哪一个"）** |
 | `text_exists` | left,top,right,bottom,text | **texts:List<String>（附加文字，与主文字并集判定）+ textMatchMode=ANY/ALL/N_OF + requiredMatchCount + trackingEnabled**、regex=false、caseSensitive=true、minConfidence=0.6f、similarity=1f、textVarKey、regionVarKey、regionPaddingPx、elementRef、preprocess |
 | `template_match` | templateBase64 | **templatePath（资源外置：模板图相对路径 `res/templates/` 下，非空时优先于 templateBase64 从项目文件读取）**、**templates:List<TemplateSpec>（附加模板，与主模板并集匹配）**、**templateMatchMode=ANY/ALL/N_OF + requiredMatchCount + trackingEnabled**、threshold=0.8f、method=CCOEFF_NORMED、scaleMode=AUTO/AUTO_MULTI、maxResults=1、templateVarKey（模板从变量读）、templateBaseScreenWidth/Height（模板基准分辨率，跨分辨率缩放用）、colorMode=GRAY/…、suppressRadius=8、pickWriteRegion=true |
 
 区域类条件还支持 `regionPaddingPx`、`regionOffset{Left,Top,Right,Bottom}Px`、`leftPct/topPct/rightPct/bottomPct`（百分比优先）、`preprocess`(OcrPreprocess：filter=NONE/GAUSSIAN_BLUR/..., grayscale, threshold 等)。
+
+### 3.5.1 多点比色 / 多点找色（`ColorAtPoint`）
+
+**一个采样点模型，两个能力**：`ColorAtPoint` 描述"相对**锚点**的一个偏移 + 该处应有的颜色"。
+
+| 字段 | 说明 |
+|---|---|
+| `dx`、`dy` | 相对锚点的像素偏移（**可为负**），默认 0 |
+| `dxPct`、`dyPct` | 相对锚点的**百分比偏移**（运行时按当前帧宽高换算），默认哨兵 `-2` = 未设置；**设置了就优先于 `dx/dy`** |
+| `color` | 该处应有的颜色（ARGB Int，可为负补码） |
+| `tolerance` | 该采样点容差（0~255）：**`>0` 用自己；`<=0`（或省略）沿用锚点容差** |
+
+> ⚠️ `dxPct/dyPct` 是**相对锚点**的偏移，**不是绝对屏幕百分比**（曾写成绝对百分比 ⇒ 真机上"锚点换位置后采样点仍钉在原处"）。偏移可正可负，所以"是否设置"看哨兵 `-2`，不是看是否落在 0~1。
+
+**① 多点比色（`color_at.points`）**——锚点固定、不做全屏搜索，用来确认"这一片界面特征"而不是单像素偶然命中：
+
+- 锚点 = `color_at.x/y` 自身，锚点判定（`hitThreshold`/`sampleMode`/`tolerance`）**必须命中**；
+- 再按 `pointsMatchMode`(`ANY`/`ALL`/`N_OF`) 汇总附加点；`N_OF` 用 **`requiredMatchCount`**（须 1 ≤ N ≤ 附加点数）；
+- `points` 为空 = 旧行为（只判锚点）。
+
+```json
+{ "type": "color_at", "x": 540, "y": 1200, "color": -14575885, "tolerance": 20,
+  "pointsMatchMode": "ALL",
+  "points": [
+    { "dx": 0, "dy": -40, "color": -1, "tolerance": 20 },
+    { "dx": 0, "dy": 40, "color": -16777216 },
+    { "dxPct": 0.05, "dyPct": 0, "color": -1 }
+  ] }
+```
+
+**② 多点找色（`color_region.points` + `matchMode="FIND_TARGETS"`）**——在识别区域内找目标位置，命中点可直接当点击/滑动坐标：
+
+- 进入条件：**`matchMode` 必须是 `"FIND_TARGETS"` 且 `points` 非空**（`points` 空 = 原有"区域找点"，只找主色/附加色）；
+- 判定：区域里按 `sampleStep`（默认 6px）扫描候选锚点，候选点像素命中颜色集合（主色 `color` + 附加色 `colors`；**找色时附加色的语义是"锚点色候选"**，如选中/未选中两态，命中其一即可）**且**各偏移采样点满足 `pointsMatchMode` ⇒ 该候选位置命中；
+- 结果给动作 `outputs`（`pointVar`/`pointsVar`/`boxesVar` 等）⇒ "找色 → 点击"常见写法：`wait_for_vision`（条件用多点找色，`outputs.pointVar="找到的点"`）→ `tap`（`pointVarKey="找到的点"`）；
+- `findDirection`：`TOP_LEFT`(默认)/`TOP_RIGHT`/`BOTTOM_LEFT`/`BOTTOM_RIGHT`，决定扫描与返回顺序 ⇒ 同画面多个相同目标时"先点哪一个"；
+- `N_OF` 用 **`pointsRequiredMatchCount`**（同样 1 ≤ N ≤ 采样点数）；
+- `anchorX/anchorY`/`anchorXPct/anchorYPct` 只是"取色锚点 = 偏移原点 + 调试绘制基准"，**不约束搜索范围**；手写脚本可省（默认 -1），只要 `dx/dy`（或 `dxPct/dyPct`）正确即可。
+
+```json
+{ "type": "if",
+  "conditions": { "mode": "ALL", "items": [
+    { "type": "vision", "condition": {
+      "type": "color_region", "left": 200, "top": 800, "right": 880, "bottom": 1600,
+      "color": -14575885, "tolerance": 20, "matchMode": "FIND_TARGETS",
+      "sampleStep": 4, "findDirection": "TOP_LEFT", "pointsMatchMode": "ALL",
+      "points": [
+        { "dx": 0, "dy": -30, "color": -1 },
+        { "dx": 30, "dy": 0, "color": -16777216 }
+      ] } } ] } }
+```
+
+**字段名别写混（高频错误）**：
+
+- 比色：`pointsMatchMode` + **`requiredMatchCount`**（`color_at` **没有** `colorMatchMode`）；
+- 找色：`pointsMatchMode` + **`pointsRequiredMatchCount`**；`colorMatchMode` + `requiredMatchCount` 是"颜色集合"那套规则，两者可同时存在且 N 不同。
+
+> App 内运行时校验器会拦：采样点 `tolerance < 0`、`N_OF` 的 N 超过采样点数（均为 ERROR）。
 
 ### 3.6 NodeSelector（`node_*` 动作的 selector）
 
@@ -628,6 +686,7 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 - [ ] 条件项枚举拼写正确：`op`=LT/LE/EQ/NE/GE/GT；`action_run_status.status`=success/failure/not_run；`run_count_limit.resetMode`=loop_end/script_end/script_open。
 - [ ] 坐标双写：像素 `x/y` + 百分比 `xPct/yPct`（0~1 之间）；区域 `left/top/right/bottom` + `leftPct/topPct/rightPct/bottomPct`；虚拟控件给 `xPct/yPct`；**单指/多指要逐 pathNode 双写，`multi_tap`/`long_press`/`swipe`/`move_pointer`/`drag_to_target` 同理**。
 - [ ] **作者归属**：`publishMeta.community_author_user_id` 已按用户确认的**本人数字 uid** 填好（见 2.3）；若留空，交付说明里必须写明"导入后需在 App 脚本详情页「声明我是作者」才能发布社区"。
+- [ ] **多点比色/找色**（3.5.1）：`points[].tolerance` 不能为负；`N_OF` 的 N 不超过采样点数（比色用 `requiredMatchCount`、找色用 `pointsRequiredMatchCount`）；**多点找色必须 `color_region.matchMode="FIND_TARGETS"`**（否则 points 不生效）；`dxPct/dyPct` 是相对锚点的偏移（未设置用 `-2`，不要写 0 表示"没设"）。
 - [ ] 运行需求齐备：有节点查找 → 提示无障碍；有视觉 → 提示屏幕录制；纯坐标可提示 Shizuku/root 可选。
 - [ ] `event_listener` 的 `async=true` 时目标非 LABEL；监听器不要自环指向自身（校验器会查）。
 - [ ] `run_code` 的 JS 只调上表命名空间（`runtime.variables/touch/vision/nodes/system/screen/network/files/process/crypto/cookies` 与全局 `console`）；**命名不是 `vars`/`sys`/`node`/`net`/`file`**；`http_request`/`file_action`/AI 视觉等一次性授权动作注意运行时授权弹窗。
@@ -645,6 +704,7 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 - ❌ `Repeat.times <= 0` / 循环 `break` 出 `if`。
 - ❌ `single_touch`/`multi_touch` 写旧字段 `points`（虽能靠读时迁移导入，但新脚本一律用 `pathNodes`）；写了 `pathNodes` 却只给像素 `x/y` 不给 `xPct/yPct`（能跑，但换分辨率就偏，校验器会警告）。
 - ❌ 顶层写 `author` / `authorId` / `uploader` 之类的作者字段：模型里**没有**这些字段（会被当未知字段丢弃）。作者只存在于 `publishMeta.community_author_user_id`（Int）+ `community_author_name`（String）。
+- ❌ 把多点比色/找色的字段写混：`color_at` 用 `pointsMatchMode` + **`requiredMatchCount`**（它没有 `colorMatchMode`）；`color_region` 的采样点规则用 `pointsMatchMode` + **`pointsRequiredMatchCount`**（`colorMatchMode` + `requiredMatchCount` 是颜色集合规则）。另外 `dxPct/dyPct` 是**相对锚点**的偏移，写成绝对屏幕百分比会让采样点"钉死"在原位。
 - ❌ 不存在的动作/节点 `type`（上表之外的一律没有，如 `keyboard`/`sound`/`vibrate` 动作——vibrate 只存在于 Prompt 的 `vibrate` 布尔字段）。
 - ❌ 期望普通异常被 `try_catch` 捕获（只捕获 TryCatchAbortException 语义路径）。
 - ❌ 在 JS 里访问 Android 类（Rhino 无 JavaMembers 支持，会 NoClassDefFoundError——只能用 `runtime.*`）。
