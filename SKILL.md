@@ -121,7 +121,7 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 | `action` | Action | 原子动作。`action:{...}` 必填（见 3.2），`config:ActionConfig`（见 3.3） |
 | `if` | If | 分支。`conditions`(ConditionGroup) 或兼容字段 `condition`(VisionCondition)/`timeCondition`/`varCondition` 四选一，`thenBlock`/`elseBlock` |
 | `var_switch` | VarSwitch | 多分支。`key`、`matchMode`(TEXT_EQUALS/TEXT_CONTAINS/NUMBER_EQUALS)、`cases:[{matchValue, block}]`、`defaultBlock` |
-| `repeat` | Repeat | 定次循环。`times`(>0)、`timesVarKey`、`block`、`intervalMillis=200` |
+| `repeat` | Repeat | 定次循环。`times`(>0)、**`timesVarKey`/`intervalMillisVarKey`（次数/间隔「从变量/表达式读取」：非空时优先，解析失败回退字面量）**、`block`、`intervalMillis=200` |
 | `block` | Block | 纯结构分组，不改变语义。`block`、`config`(可带 RANDOM 顺序) |
 | `try_catch` | TryCatch | `tryBlock`/`catchBlock`；try 内动作失败进 catch |
 | `race` | Race | 并行竞速。`leftBlock`/`rightBlock`，先完成者生效、另一路取消 |
@@ -133,8 +133,8 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 | `set_var` | SetVar | `key`、`value`(JsonElement，四形态见 4.3)、`scope=LOCAL`；**`items:List<VariableItem>`（多变量：非空时逐条执行且优先于单条 key/value，见 4.3）** |
 | `inc_var` | IncVar | `key`、`delta=1.0`、`scope`；不存在按 0 处理；**`items`（多变量增量，同上）** |
 | `get_var` | GetVar | 变量拷贝。`sourceKey`→`targetKey`、`targetScope`；**`items`（多变量拷贝：每项 `sourceKey`→`key`）** |
-| `while_var` | WhileVar | 变量循环。`key`、`op`(LT/LE/EQ/NE/GE/GT)、`value`(Double 字面量)、**`valueVarKey`（S1452：上界从变量读，非空优先于 value，解析失败回退字面量）**、`block`、`intervalMillis=200`、`maxIterations=10000` |
-| `while_vision` | WhileVision | 视觉循环。`condition`(VisionCondition)、`block`、`intervalMillis=200`、`timeoutMillis=10000`、`maxIterations=10000` |
+| `while_var` | WhileVar | 变量循环。`key`、`op`(LT/LE/EQ/NE/GE/GT)、`value`(Double 字面量)、**`valueVarKey`/`intervalMillisVarKey`/`maxIterationsVarKey`（上界/间隔/最大次数「从变量/表达式读取」：非空优先，失败回退字面量）**、`block`、`intervalMillis=200`、`maxIterations=10000` |
+| `while_vision` | WhileVision | 视觉循环。`condition`(VisionCondition)、`block`、`intervalMillis=200`、`timeoutMillis=10000`（可空=不限制）、`maxIterations=10000`、`retryTimes=0`(-1=直到命中)、`retryIntervalMs=200`；**上述数值字段都配有 `*VarKey`（`intervalMillisVarKey`/`timeoutMillisVarKey`/`maxIterationsVarKey`/`retryTimesVarKey`/`retryIntervalMsVarKey`）「从变量/表达式读取」，非空优先、失败回退字面量；`timeoutMillisVarKey` 解析得到 `<=0` 表示不限制** |
 | `break` | Break | 终止最近一层循环（Repeat/While） |
 | `continue` | Continue | 跳过当前轮次进入下一轮 |
 
@@ -686,6 +686,7 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 - [ ] 条件项枚举拼写正确：`op`=LT/LE/EQ/NE/GE/GT；`action_run_status.status`=success/failure/not_run；`run_count_limit.resetMode`=loop_end/script_end/script_open。
 - [ ] 坐标双写：像素 `x/y` + 百分比 `xPct/yPct`（0~1 之间）；区域 `left/top/right/bottom` + `leftPct/topPct/rightPct/bottomPct`；虚拟控件给 `xPct/yPct`；**单指/多指要逐 pathNode 双写，`multi_tap`/`long_press`/`swipe`/`move_pointer`/`drag_to_target` 同理**。
 - [ ] **作者归属**：`publishMeta.community_author_user_id` 已按用户确认的**本人数字 uid** 填好（见 2.3）；若留空，交付说明里必须写明"导入后需在 App 脚本详情页「声明我是作者」才能发布社区"。
+- [ ] **循环数值字段可变量化**：`repeat.timesVarKey`/`intervalMillisVarKey`、`while_var.valueVarKey`/`intervalMillisVarKey`/`maxIterationsVarKey`、`while_vision.intervalMillisVarKey`/`timeoutMillisVarKey`/`maxIterationsVarKey`/`retryTimesVarKey`/`retryIntervalMsVarKey` 支持**变量名或表达式**（解析失败回退字面量）；`times` 仍必填，用 VarKey 时给个兜底数字即可。
 - [ ] **多点比色/找色**（3.5.1）：`points[].tolerance` 不能为负；`N_OF` 的 N 不超过采样点数（比色用 `requiredMatchCount`、找色用 `pointsRequiredMatchCount`）；**多点找色必须 `color_region.matchMode="FIND_TARGETS"`**（否则 points 不生效）；`dxPct/dyPct` 是相对锚点的偏移（未设置用 `-2`，不要写 0 表示"没设"）。
 - [ ] 运行需求齐备：有节点查找 → 提示无障碍；有视觉 → 提示屏幕录制；纯坐标可提示 Shizuku/root 可选。
 - [ ] `event_listener` 的 `async=true` 时目标非 LABEL；监听器不要自环指向自身（校验器会查）。
