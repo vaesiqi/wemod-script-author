@@ -27,6 +27,7 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
   - 视觉类动作（`*vision*`/`click_color`/`click_text`/`click_image`/`scroll_until_vision`）**依赖屏幕录制（MediaProjection）**。
   - 写脚本时所有坐标/区域**同时给像素值（`x/y`）和百分比（`xPct/yPct`）**：运行时 `xPct` 在 `0f..1f` 时优先按百分比×当前屏幕，否则回退像素值；`xPct=-1f` 表示"未设置"。**单指/多指手势的每个路径节点也照此双写**（见 3.2.1）。
   - **多个变量一律合并**：同一处要初始化/修改/拷贝多个变量时，**必须写成一个变量节点 + `items`**（`set_var`/`inc_var`/`get_var` 都支持，条目还能混用 set/inc/get），**不要串成一排同名节点**（见 4.3）——逐个 `set_var` 是最常见的退化写法。
+  - **变量解析失败 = 软失败（不再回退字面量）**：**参数类**字段（坐标/时长/间隔/次数/超时/文本内容/链接/路径/虚拟控件参数）的 `*VarKey` 一旦非空，运行时**必须**解析成功——变量**未定义** / 值为 **null 或空白串** / 表达式**求值失败** ⇒ 动作**按失败处理**（走 `onFail`/`retryTimes`/`STOP` 等失败策略，运行日志写明「字段名 + 变量名 + 原因」）。唯一例外：变量值**类型不可转**（如文本当坐标）⇒ 记警告并回落字面量。**条件类**（视觉条件的颜色/文字/模板/区域变量、条件组重试次数）解析失败按「不成立 / 回退」处理，**不中断**流程，但同样会写日志。
 
 ## 1. 交付流程（五步）
 
@@ -686,7 +687,8 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 - [ ] 条件项枚举拼写正确：`op`=LT/LE/EQ/NE/GE/GT；`action_run_status.status`=success/failure/not_run；`run_count_limit.resetMode`=loop_end/script_end/script_open。
 - [ ] 坐标双写：像素 `x/y` + 百分比 `xPct/yPct`（0~1 之间）；区域 `left/top/right/bottom` + `leftPct/topPct/rightPct/bottomPct`；虚拟控件给 `xPct/yPct`；**单指/多指要逐 pathNode 双写，`multi_tap`/`long_press`/`swipe`/`move_pointer`/`drag_to_target` 同理**。
 - [ ] **作者归属**：`publishMeta.community_author_user_id` 已按用户确认的**本人数字 uid** 填好（见 2.3）；若留空，交付说明里必须写明"导入后需在 App 脚本详情页「声明我是作者」才能发布社区"。
-- [ ] **循环数值字段可变量化**：`repeat.timesVarKey`/`intervalMillisVarKey`、`while_var.valueVarKey`/`intervalMillisVarKey`/`maxIterationsVarKey`、`while_vision.intervalMillisVarKey`/`timeoutMillisVarKey`/`maxIterationsVarKey`/`retryTimesVarKey`/`retryIntervalMsVarKey` 支持**变量名或表达式**（解析失败回退字面量）；`times` 仍必填，用 VarKey 时给个兜底数字即可。
+- [ ] **循环数值字段可变量化**：`repeat.timesVarKey`/`intervalMillisVarKey`、`while_var.valueVarKey`/`intervalMillisVarKey`/`maxIterationsVarKey`、`while_vision.intervalMillisVarKey`/`timeoutMillisVarKey`/`maxIterationsVarKey`/`retryTimesVarKey`/`retryIntervalMsVarKey` 支持**变量名或表达式**；`times` 仍必填（用 VarKey 时给兜底数字，但**运行时以变量为准**）。
+- [ ] **变量赋值时序**：所有 `*VarKey` 指向的变量必须在**执行到该动作之前**已赋值——未定义 / 值为空 / 表达式失败 ⇒ 动作**软失败**（不再用字面量兜底，见 §0）。跨分支使用的变量要在每个分支内都赋值，别指望"没准备好就走默认值"。
 - [ ] **多点比色/找色**（3.5.1）：`points[].tolerance` 不能为负；`N_OF` 的 N 不超过采样点数（比色用 `requiredMatchCount`、找色用 `pointsRequiredMatchCount`）；**多点找色必须 `color_region.matchMode="FIND_TARGETS"`**（否则 points 不生效）；`dxPct/dyPct` 是相对锚点的偏移（未设置用 `-2`，不要写 0 表示"没设"）。
 - [ ] 运行需求齐备：有节点查找 → 提示无障碍；有视觉 → 提示屏幕录制；纯坐标可提示 Shizuku/root 可选。
 - [ ] `event_listener` 的 `async=true` 时目标非 LABEL；监听器不要自环指向自身（校验器会查）。
@@ -705,6 +707,7 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 - ❌ `Repeat.times <= 0` / 循环 `break` 出 `if`。
 - ❌ `single_touch`/`multi_touch` 写旧字段 `points`（虽能靠读时迁移导入，但新脚本一律用 `pathNodes`）；写了 `pathNodes` 却只给像素 `x/y` 不给 `xPct/yPct`（能跑，但换分辨率就偏，校验器会警告）。
 - ❌ 顶层写 `author` / `authorId` / `uploader` 之类的作者字段：模型里**没有**这些字段（会被当未知字段丢弃）。作者只存在于 `publishMeta.community_author_user_id`（Int）+ `community_author_name`（String）。
+- ❌ 依赖"变量没定义就用字面量跑"的旧行为：`*VarKey` 非空时**解析失败即软失败**（旧版是静默回退字面量）。要表达"没准备好就跳过 / 走默认"，请用 `if` 变量条件、`try_catch` 或显式 `set_var` 兜底，而不是依赖回落。
 - ❌ 把多点比色/找色的字段写混：`color_at` 用 `pointsMatchMode` + **`requiredMatchCount`**（它没有 `colorMatchMode`）；`color_region` 的采样点规则用 `pointsMatchMode` + **`pointsRequiredMatchCount`**（`colorMatchMode` + `requiredMatchCount` 是颜色集合规则）。另外 `dxPct/dyPct` 是**相对锚点**的偏移，写成绝对屏幕百分比会让采样点"钉死"在原位。
 - ❌ 不存在的动作/节点 `type`（上表之外的一律没有，如 `keyboard`/`sound`/`vibrate` 动作——vibrate 只存在于 Prompt 的 `vibrate` 布尔字段）。
 - ❌ 期望普通异常被 `try_catch` 捕获（只捕获 TryCatchAbortException 语义路径）。

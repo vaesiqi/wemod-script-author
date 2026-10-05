@@ -71,6 +71,11 @@ node tools/validate-script.mjs 你的脚本.axs
 #      找色必须在 color_region 上写 matchMode="FIND_TARGETS" 再给 points + pointsMatchMode + pointsRequiredMatchCount
 #      （默认 REGION_MATCH 时 points 不生效）；命中点走 outputs.pointVar，可直接给 tap 的 pointVarKey。
 #      范例：examples/color-multi-point-001.axs，说明：SKILL.md §3.5.1。
+#    · 变量解析失败 = 软失败（不再回退字面量）：参数类字段（坐标/时长/次数/间隔/超时/文本内容/链接/路径/虚拟控件）
+#      的 *VarKey 非空时，变量未定义 / 值为 null 或空白串 / 表达式求值失败 ⇒ 动作按失败处理（走 onFail / 重试策略，
+#      运行日志写明「字段名 + 变量名 + 原因」）；唯一例外：值类型不可转（如文本当坐标）→ 警告后回落。
+#      条件类（视觉条件的颜色/文字/模板/区域变量、条件组重试）不中断流程，但同样写日志。
+#      ⇒ 请在动作执行之前给变量赋值，不要依赖「没准备好就用默认值」的旧行为。
 ```
 
 ## 版本与模型基准

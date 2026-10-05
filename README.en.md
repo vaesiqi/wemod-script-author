@@ -78,6 +78,14 @@ node tools/validate-script.mjs your-script.axs
 #      (with the default REGION_MATCH the points are ignored). The hit point is written via outputs.pointVar and can
 #      be fed straight into tap.pointVarKey.
 #      Example: examples/color-multi-point-001.axs, docs: SKILL.md §3.5.1.
+#    · Variable resolution failure = SOFT FAILURE (no more falling back to the literal): for parameter fields
+#      (coordinates / durations / counts / intervals / timeouts / text payloads / links / paths / virtual controls),
+#      when a *VarKey is non-empty the runtime REQUIRES it to resolve — undefined variable / null or blank value /
+#      expression evaluation failure ⇒ the action fails (onFail / retry policy, and the run log names the field,
+#      the variable and the reason). Only exception: non-convertible value type (e.g. text used as a coordinate)
+#      ⇒ warning + literal fallback. Condition-class fields (vision condition variables, condition-group retries)
+#      never break the flow, but they do log.
+#      ⇒ Assign variables BEFORE the action that consumes them; don't rely on "fall back to a default if unset".
 ```
 
 ## Exit codes of the validator (for scripting / CI)
