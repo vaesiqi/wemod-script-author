@@ -450,7 +450,9 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 
 ### 4.1 定义与作用域
 
-- 定义：`set_var`/`inc_var` 节点内联；控制台可调参数用顶层 `consoleVariables`（`ConsoleVariableBinding`：`key` 必填、**`defaultValue` 是 String 类型（如 `"50"`，不是数字 50）**、`defaultScope="LOCAL"/"GLOBAL"`、`controlType=AUTO/TOGGLE/NUMBER/TEXT/SELECT/ARRAY`、`valueType`(字符串)、`minValue/maxValue/stepValue:Double?`、`options:List<ConsoleVariableOption{label,value}>`、`layoutMode=HORIZONTAL/VERTICAL`、`label`/`description`/`group`(面板展示)、`enabled`、`readOnly`、`order`）。
+- 定义：`set_var`/`inc_var` 节点内联；控制台可调参数用顶层 `consoleVariables`（`ConsoleVariableBinding`：`key` 必填、**`defaultValue` 是 String 类型（如 `"50"`，不是数字 50）**、`defaultScope="LOCAL"/"GLOBAL"`、`controlType=AUTO/TOGGLE/NUMBER/TEXT/SELECT/MULTI_SELECT`、`valueType`(字符串)、`minValue/maxValue/stepValue:Double?`、`options:List<ConsoleVariableOption{label,value}>`、`layoutMode=HORIZONTAL/VERTICAL`、`label`/`description`/`group`(面板展示)、`enabled`、`readOnly`、`order`）。
+- **`MULTI_SELECT`（多选，S-控件-3）**：`options` 是候选（`label` 显示 / `value` 落值），控制台里是**折叠下拉 + 勾选**；变量运行值是**选中项 `value` 的列表**（如 `["a","b"]`），脚本侧判断用 `contains(变量名, "选项值")`；默认选中项写在 `defaultValue`，用 `@` 分隔（如 `"a@b"`，也支持 JSON 数组文本 `["a","b"]`）。
+- **`ARRAY` 已弃用（S-控件-3）**：数组是数据类型、不是交互形态 —— 校验器仍接受 `ARRAY` 只为兼容旧脚本，**新脚本请改用 `MULTI_SELECT`**（枚举集合多选）或 `TEXT`；要按元素读写数组仍用下标引用（如 `识别框数组[0]`）。
 - 作用域：`LOCAL`（默认）/`GLOBAL`。读取是合并视图：**内置常量($前缀) < global < local**（local 覆盖同名）。子流程进入/返回自动快照恢复局部变量；子脚本（run_script）只继承 global。
 - 面板变量播种：`defaultScope` 为空或 LOCAL 时按 GLOBAL 写入。
 - 内置变量：`$SCRIPT_NAME/$SCRIPT_ID/$SCREEN_WIDTH/$SCREEN_HEIGHT/$BASE_SCREEN_WIDTH/$BASE_SCREEN_HEIGHT/$NOW_MS/$NOW_SEC/$NOW_DATE/$NOW_TIME/$DEVICE_MODEL/$DEVICE_BRAND/$ANDROID_VERSION/$ANDROID_SDK/$APP_VERSION`。

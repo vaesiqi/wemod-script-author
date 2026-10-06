@@ -62,7 +62,7 @@ const COMPARE_OPS = new Set(['LT', 'LE', 'EQ', 'NE', 'GE', 'GT']);
 const SCOPES = new Set(['LOCAL', 'GLOBAL']);
 const OUTCOME_STRATEGIES = new Set(['CONTINUE', 'STOP', 'RETRY', 'GOTO']);
 const OUTCOME_TARGET_TYPES = new Set(['LABEL', 'SUB_FLOW', 'ACTION']);
-const CONSOLE_CONTROL_TYPES = new Set(['AUTO', 'TOGGLE', 'NUMBER', 'TEXT', 'SELECT', 'ARRAY']);
+const CONSOLE_CONTROL_TYPES = new Set(['AUTO', 'TOGGLE', 'NUMBER', 'TEXT', 'SELECT', 'MULTI_SELECT', 'ARRAY']);
 const PROMPT_DISPLAY_TYPES = new Set(['DIALOG', 'SIMPLE', 'NOTIFICATION']);
 
 /* ============ 弹窗控件与通用字段类型校验（S-事件源-25） ============
