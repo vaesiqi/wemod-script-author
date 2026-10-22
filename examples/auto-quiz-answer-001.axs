@@ -197,8 +197,7 @@
                             "left": 0, "top": 0, "right": 1080, "bottom": 2400,
                             "leftPct": 0.0, "topPct": 0.0, "rightPct": 1.0, "bottomPct": 1.0,
                             "text": "",
-                            "textVarKey": "当前题干",
-                            "minConfidence": 0.6
+                            "textVarKey": "当前题干"
                           }
                         }
                       ]
@@ -432,8 +431,7 @@
                                           "left": 0, "top": 0, "right": 1080, "bottom": 2400,
                                           "leftPct": 0.0, "topPct": 0.0, "rightPct": 1.0, "bottomPct": 1.0,
                                           "text": "",
-                                          "textVarKey": "当前选项文字",
-                                          "minConfidence": 0.6
+                                          "textVarKey": "当前选项文字"
                                         }
                                       },
                                       "config": { "retryTimes": 2, "retryIntervalMs": 600 },
@@ -489,8 +487,7 @@
                               "left": 0, "top": 0, "right": 1080, "bottom": 2400,
                               "leftPct": 0.0, "topPct": 0.0, "rightPct": 1.0, "bottomPct": 1.0,
                               "text": "",
-                              "textVarKey": "当前附加",
-                              "minConfidence": 0.6
+                              "textVarKey": "当前附加"
                             }
                           },
                           "config": { "retryTimes": 2, "retryIntervalMs": 600 },

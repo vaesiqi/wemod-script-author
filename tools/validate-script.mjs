@@ -42,6 +42,8 @@ const ACTION_TYPES = new Set([
   'run_script', 'switch_virtual_control_scheme', 'trigger_virtual_button',
   'wait_for_vision', 'check_vision', 'virtual_button', 'virtual_joystick',
   'ai_vision', 'ai_reply', 'ai_agent',
+  // S-控件-5 能力模型同步：自动寻路（AutoPathfind，见 SKILL.md §3.2.2）
+  'auto_pathfind',
 ]);
 
 const VISION_TYPES = new Set(['color_at', 'color_region', 'text_exists', 'template_match']);
@@ -57,6 +59,8 @@ const COLOR_FIND_DIRECTIONS = new Set(['TOP_LEFT', 'TOP_RIGHT', 'BOTTOM_LEFT', '
 const CONDITION_ITEM_TYPES = new Set([
   'vision', 'time', 'variable', 'expression', 'action_run_status',
   'screen_on', 'screen_locked', 'node', 'run_count_limit',
+  // S-控件-5 能力模型同步：以下 4 种条件已存在于 model/ConditionGroup.kt
+  'random', 'group', 'foreground_app', 'screen_stable',
 ]);
 const COMPARE_OPS = new Set(['LT', 'LE', 'EQ', 'NE', 'GE', 'GT']);
 const SCOPES = new Set(['LOCAL', 'GLOBAL']);

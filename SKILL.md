@@ -139,14 +139,14 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 | `break` | Break | 终止最近一层循环（Repeat/While） |
 | `continue` | Continue | 跳过当前轮次进入下一轮 |
 
-### 3.2 动作类型全清单（`model/ScriptAction.kt`，共 52 种，`action.type`；另有 `unknown_type` 兜底类，不要手写）
+### 3.2 动作类型全清单（`model/ScriptAction.kt`，共 53 种，`action.type`；另有 `unknown_type` 兜底类，不要手写）
 
 **坐标基础动作**（可走 Shizuku/root 后端）：
 
 | type | 类 | 关键字段（必填加粗） |
 |---|---|---|
 | `tap` | Tap | **x,y**、duration=50、xPct/yPct=-1f、pointVarKey、durationVarKey |
-| `multi_tap` | MultiTap | **x,y**（+ xPct/yPct）、count=2、intervalMs=80、duration=50 |
+| `multi_tap` | MultiTap | **x,y**（+ xPct/yPct）、count=2、intervalMs=80、duration=50、pointVarKey、**（S-连点次数变量-1）countVarKey/intervalMsVarKey/durationVarKey**（次数/连点间隔/单次时长均可从变量读取；`double_tap` 双击即 count=2 的连点） |
 | `touch_down` | TouchDown | **x,y**（+ xPct/yPct）、pointerId=1、holdMs=10000 |
 | `touch_up` | TouchUp | pointerId=1、releaseMs=50 |
 | `move_pointer` | MovePointer | touchDownRefId=""(引用 touch_down 的 pointerId)、x/y=-1（+ xPct/yPct）、duration=300、pathType=LINE |
@@ -280,6 +280,67 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 | `trigger_virtual_button` | TriggerVirtualButton | controlId/controlName、triggerType=DEFAULT_ACTION/TAP/LONG_PRESS_RELEASE/PRESS_DOWN/RELEASE |
 | `virtual_button` | VirtualButton | 注册虚拟按键（见 6.3） |
 | `virtual_joystick` | VirtualJoystick | 注册虚拟摇杆（见 6.3） |
+| `auto_pathfind` | AutoPathfind | **自动寻路**（小地图找路，详见 **3.2.2**）：小地图区域 + 自己颜色 + 墙颜色/样本 + 目的地（点/图片/颜色/文字）+ 走法（点地面/摇杆）+ 结果变量 |
+
+### 3.2.2 自动寻路（`auto_pathfind`，S-寻路-M1~M23）
+
+> 用途：在小地图上按颜色/模板认出「自己 / 墙 / 目标」，算路并**自动走过去**（打怪、采集、巡逻）。
+> 小白主流程：框小地图 → 点自己 → 点墙（或点「能走的地面」）→ 点目标 → 选走法。
+
+**① 小地图区域**：`leftPct/topPct/rightPct/bottomPct`（0~1，-1=未设，优先）、`left/top/right/bottom`（像素保底）。
+圆形小地图：`circularRegion=true` + `circleCenterXPct/circleCenterYPct`（-1=区域中心）+ `circleRadiusPct=0.5`（相对区域短边）。
+
+**② 自己（角色点）**：
+- `selfColor`（**ARGB int**）+ `selfTolerance=40`（内部值，不用调）
+- `selfSampleX/selfSampleY`（点「自己」时的屏幕坐标）+ `selfSampleXPct/selfSampleYPct`（截图帧内百分比，-1=旧数据）——同色图标多时挑「离你点的那里最近」
+- `selfSearchRadiusPct=0.06`（在小地图内找自己的搜索范围）
+
+**③ 墙 / 可走区域**：
+- `wallColors: List<Int>`、`wallTolerance=28`、`wallSamples: List<{x,y,color,xPct,yPct}>`（点墙时同时记坐标，运行期在该位置取小图做**模板匹配**，比纯颜色稳）
+- `wallMatchTolerance=26`（灰度平均绝对差）、`patchHalf=3`（模板半边→7×7）
+- `pickedColorsAreWalkable=false`：**false=点的是墙**（其余可走）；**true=点的是能走的地面**（其余算墙，适合深色地面+浅色线条的地图）
+
+**④ 目的地 `goalSource`**：
+| 取值 | 说明 | 关键字段 |
+|---|---|---|
+| `POINT`（默认） | 点一个位置 | `goalXPct/goalYPct`（屏幕百分比）；`goalPointSpace=SCREEN_PX/REGION_PERCENT` 说明变量里坐标的基线 |
+| `TEMPLATE` | 按目标图片每帧现找（找怪/采集物） | `goalTemplatePath`（res/templates/xxx.png）、`goalTemplateB64`（单文件回退）、`goalTemplateThreshold=0.75`、`goalTemplateRotate=true`（0~330° 多角度）、`goalTemplateUseEdges=false`（按轮廓而非颜色）、`goalTemplateAutoTrim=true`（自动裁掉四周纯色背景） |
+| `COLOR` | 多点找色 | `goalColorSamples: List<{x,y,color}>`（首点主色，其余为相对偏移特征点）、`goalColorTolerance=24` |
+| `TEXT` | 按文字 OCR 找（怪物名/采集物名） | `goalText`、`goalTextCaseSensitive=false` |
+
+- **变量覆盖**（优先于面板固定值）：`goalTemplateVarKey`（路径/base64）、`goalTextVarKey`、`goalColorVarKey`（#RRGGBB / 十进制 / 逗号多色）。
+- `goalNotFoundTimeoutMs=3000`（找不到目标多久算「这里没有」，挂机必备）+ `goalNotFoundTimeoutVarKey`。
+- `tapTargetOnArrive=false`：走到目标旁顺手点一下（打怪/采集）。
+
+**⑤ 怎么走 `moveMode`**：`TAP_GROUND`（默认，点地面）/ `JOYSTICK`（推摇杆：`joystickCenterXPct=0.12`、`joystickCenterYPct=0.8`、`joystickRadiusPx=160`）。
+
+**⑥ 运行与输出**：
+- `previewBeforeRun=true`（先给 2 秒路线预览）、`tapIntervalMs=150`、`joystickStepMs=120`、`timeoutMs=30000`、`lookaheadCells=8`、`arriveCells=2`
+- 结果变量：`resultStatusVar`（到达/未找到目标/走不通/超时/没找到自己）、`targetPointVar`（目标屏幕坐标 `"x,y"`）、`outputVar`（可选：算好的路点）
+- 参考图（编辑器画路线用）：`referenceImagePath`（项目内路径，与模板图同口径）、`referenceImageB64`（单文件回退）、`referenceRevision`（同路径覆盖后编辑器靠它刷新）、`referenceWidth/referenceHeight`、`captureScreenWidth/captureScreenHeight`
+- 高级变量：`regionVarKey`（`"left,top,right,bottom"` 像素）、`selfColorVarKey`、`wallColorVarKeys`、`goalPointVarKey`（`"x,y"` 像素）、`joystickCenterVarKey`、`timeoutMsVarKey`、`tapIntervalMsVarKey`、`joystickStepMsVarKey`、`cellPx=4`（采样粗细）
+
+```json
+{ "type": "action", "action": {
+  "type": "auto_pathfind",
+  "leftPct": 0.02, "topPct": 0.06, "rightPct": 0.28, "bottomPct": 0.34,
+  "selfColor": -16711936, "selfSampleXPct": 0.15, "selfSampleYPct": 0.2,
+  "wallColors": [-16777216], "pickedColorsAreWalkable": false,
+  "goalSource": "TEMPLATE", "goalTemplatePath": "res/templates/monster.png",
+  "moveMode": "TAP_GROUND",
+  "resultStatusVar": "寻路结果", "targetPointVar": "目标点"
+} }
+```
+注意：`selfColor/wallColors` 是 **ARGB int**（不是 `#RRGGBB` 字符串）；百分比字段范围 0~1。
+
+### 3.2.3 触控「段内动作」（S-触控-重构-1 / S-触控-内联-1）
+
+单指/多指的每段（`segments[].steps`）除「走路径」外，还能**在该段执行一个内联动作**——一次按下可以表达「点→滑→点」整串手势，不必拆成多个动作节点：
+
+- 段通用：`pathNodes`、`duration`、`pathType=POINT/LINE/POLYLINE/RECORD/CURVE`、`bezierCurveFactor`
+- 段内动作：`action`（白名单：点击 / 长按 / 双击 / 滑动 / 点击图片 / 点击文字 / 点击颜色）+ `actionConfig`（该动作通用配置）
+- 段调度：`startDelayMs`（该段开始前延迟）、`stepLabel`（段标题）
+- 路径节点 `touch pathNodes[]` 新增：`sustainMs`（在该点停留时长）、`durationToHereMs`（到该点累计时长）、`touchDownRefId`（该点引用哪个按下触点）、`condition`（该步运行条件）、`selector`（节点选择器）、`sourceType`
 
 ### 3.3 ActionConfig（每个 action/block 节点的通用运行配置，`model/ActionConfig.kt`）
 
@@ -360,7 +421,7 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 |---|---|---|
 | `color_at` | x,y,color(ARGB Int) | tolerance=10、sampleRadius=0、sampleMode=CENTER/CROSS/SQUARE、**hitThreshold=1**、similarity=1f、colorVarKey、elementRef、preprocess；**多点比色：`points:List<ColorAtPoint>`（相对锚点的附加采样点）+ `pointsMatchMode=ANY/ALL/N_OF` + `requiredMatchCount`（见 3.5.1）** |
 | `color_region` | left,top,right,bottom,color | **colors:List<Int>（附加颜色，与主色并集判定）**、**colorVarKeys:List<String>（附加颜色「从变量读」，与 colors 平行，非空时该变量值覆盖对应位置颜色）**、**colorMatchMode=ANY/ALL/N_OF + requiredMatchCount + trackingEnabled（命中后写回 regionVarKey）**、matchMode=REGION_MATCH/FIND_TARGETS、tolerance=10、sampleStep=6、hitRatio=1f、requireAverageMatch=true、earlyAccept/earlyReject=true、similarity=1f、colorVarKey、elementRef、preprocess；**多点找色（见 3.5.1）：`points:List<ColorAtPoint>`（`matchMode="FIND_TARGETS"` 且非空时进入）+ `pointsMatchMode` + `pointsRequiredMatchCount` + 锚点 `anchorX/anchorY/anchorXPct/anchorYPct` + `findDirection=TOP_LEFT/TOP_RIGHT/BOTTOM_LEFT/BOTTOM_RIGHT`（区域扫描顺序，决定同画面多个目标"先返回哪一个"）** |
-| `text_exists` | left,top,right,bottom,text | **texts:List<String>（附加文字，与主文字并集判定）+ textMatchMode=ANY/ALL/N_OF + requiredMatchCount + trackingEnabled**、regex=false、caseSensitive=true、minConfidence=0.6f、similarity=1f、textVarKey、regionVarKey、regionPaddingPx、elementRef、preprocess |
+| `text_exists` | left,top,right,bottom,text | **texts:List<String>（附加文字，与主文字并集判定）+ textMatchMode=ANY/ALL/N_OF + requiredMatchCount + trackingEnabled**、regex=false、caseSensitive=true、similarity=1f、textVarKey、regionVarKey、regionPaddingPx、elementRef、preprocess |
 | `template_match` | templateBase64 | **templatePath（资源外置：模板图相对路径 `res/templates/` 下，非空时优先于 templateBase64 从项目文件读取）**、**templates:List<TemplateSpec>（附加模板，与主模板并集匹配）**、**templateMatchMode=ANY/ALL/N_OF + requiredMatchCount + trackingEnabled**、threshold=0.8f、method=CCOEFF_NORMED、scaleMode=AUTO/AUTO_MULTI、maxResults=1、templateVarKey（模板从变量读）、templateBaseScreenWidth/Height（模板基准分辨率，跨分辨率缩放用）、colorMode=GRAY/…、suppressRadius=8、pickWriteRegion=true |
 
 区域类条件还支持 `regionPaddingPx`、`regionOffset{Left,Top,Right,Bottom}Px`、`leftPct/topPct/rightPct/bottomPct`（百分比优先）、`preprocess`(OcrPreprocess：filter=NONE/GAUSSIAN_BLUR/..., grayscale, threshold 等)。
@@ -443,7 +504,7 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 - **视觉识别行为要点（写脚本必知）**：
   - **OCR 是「行级」匹配**：`text_exists` 对每个 OCR 识别行**独立判定**（关键词必须与该行内的目标内容同行才会命中）。不同厂商 OCR 的行切分不同（实测 OPPO 会把「距我」与数字拆到不同行）→ 需要跨行取值时，用 `allTextVar` 拿整段文本再用 `run_code`(JS) 自行解析，不要依赖行结构。
   - **命中行会自动提取数字**：`numbersVar` = 命中行内**全部数字**（正则 `-?\d+(?:\.\d+)?`，顺序保持）；`numberVar` = 首个数字。例：「全程4.16km」→ `[4.16]`；若「全程4.16km 距我25.29km」同在一行 → `[4.16, 25.29]`。
-  - `regex=true` 时用正则匹配行文本（命中即 1.0 分，不受 `minConfidence` 影响）；正则模式下 `texts`/`allTextVar` 仍按行收集。
+  - `regex=true` 时用正则匹配行文本（命中即 1.0 分，不受匹配阈值 `similarity` 影响）；正则模式下 `texts`/`allTextVar` 仍按行收集。
 - **WaitNode 超时**：先写变量（matched=false）再抛软失败（不中断脚本）；CheckNode 单次检测无条件继续。
 
 ## 4. 变量引擎（`core/expression/`）
@@ -603,6 +664,9 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 | `WINDOW` | `onWindowChanged`（切换界面）/ `onContentChanged`（内容更新，**触发很频繁**） | 无障碍界面变化 | 无障碍服务 |
 | `SCREEN` | `onScreenOn` / `onScreenOff` / `onUserPresent`（解锁） | 屏幕状态变化 | 无 |
 | `CALL` | `onCallIncoming` | 来电 | **尚未开放** |
+| `TIME` | `onTimeReached`（到点）/ `onTimeInterval`（每隔一段时间） | 系统时间监听，**不需要任何权限** | 无 |
+| `GESTURE` | `onGesture`（点击/长按/滑动，按阈值分类） | 系统手势监听（S-手势监听-1） | 无障碍服务 |
+| `REGION` | `onRegionChanged` + 四种视觉条件事件 | 屏幕区域画面变化 / 区域内视觉命中（S-区域画面变化监听-1 / S-视觉条件监听-1） | 截屏能力（无障碍截图 / 取图模式） |
 
 配套过滤字段（留空 = 不限制；系统事件很泛，**建议至少配一项**，否则会被噪音频繁触发）：
 
@@ -619,6 +683,10 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 ```
 
 - 字段含义：`filterPackage` 限定来源应用（多个用逗号分隔）；`filterTitleContains` 通知标题包含；`filterTextContains` 通知内容 / 界面文字包含；`filterClassName` 界面类名包含（仅 `WINDOW` 源）。
+- **手势来源（`GESTURE`）**：`filterGestureTypes: Set<CLICK/LONG_PRESS/SWIPE>`（默认三种）、`filterSwipeDirections: Set<UP/DOWN/LEFT/RIGHT>`（空=不限方向）、`gestureTapMaxDistancePx=24`（起止位移 ≤ 它才算点击/长按）、`gestureLongPressMinMs=450`（按住 ≥ 它才算长按）——类型由**原始触摸 + 阈值**在引擎侧判定，可按目标 App 调。
+- **区域来源（`REGION`）**：`regionLeft/Top/Right/Bottom`（屏幕像素；任一 ≤0 或 right≤left ⇒ 未配置=全屏）、`regionChangePercent=2`（变化占比阈值 %，越大越迟钝抗噪）、`regionTolerance=12`（单点灰度容差 0~255）、`regionSampleIntervalMs=500`、`regionCooldownMs=1500`（触发后冷却，防动画刷屏）、`regionResetBaselineAfterOwnInput=true`（脚本自身操作后重设基线，避免「自己点→区域变→触发→再点」自激）；选「视觉条件事件」时用 `visionCondition: VisionCondition?` 承载条件本体（`null` = 未配置，运行时不触发并告警）。
+- **时间来源（`TIME`）**：`timeSpecText`（`09:30:58` 当天该时刻、已过则次日；`+00:30:00` 脚本开始后 30 分钟；`2026-10-16 09:30:58` 绝对日期时刻）、`timeIntervalMs=300000` + `timeIntervalVarKey`（间隔型）、`timeFireWhenPast=false`（启动时目标时刻已过：false=等下一次 / 绝对日期永不触发并在日志说明；true=立即触发一次）。
+- **事件重入**：`queueRepeatedTriggers=false`（默认丢弃并写「递归触发/已阻止」日志；`true`=按到达顺序排队串行，最多 8 个）。手势这类高频输入建议开。
 - **权限未授权不会静默失效**：脚本启动时运行日志会打明确提示（写明"该监听不会生效"与开启路径），属性面板也会显示提示条、可点击直达系统设置。
 - 系统事件同样写事件变量（`writeEventToVars=true`），`event_reason` 为该来源的中文名（如「通知到达」）。
 - 仅当脚本里真的存在 `source != SCRIPT` 的监听器时才注册系统监听，脚本结束即注销（不留常驻开销）。
@@ -715,6 +783,40 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 - ❌ 期望普通异常被 `try_catch` 捕获（只捕获 TryCatchAbortException 语义路径）。
 - ❌ 在 JS 里访问 Android 类（Rhino 无 JavaMembers 支持，会 NoClassDefFoundError——只能用 `runtime.*`）。
 - ❌ `open_app` 之外的任意包名启动方式（没有 intent 动作）。
+
+## 附 A：字段增量速查（近期能力模型新增，早期文档未覆盖）
+
+> 下列字段**当前模型已支持**，写脚本时可选用；不写走默认值。语义按「用途（关键默认）」给出。
+
+| 动作 / 类型 | 补充字段 |
+|---|---|
+| `click_text` / `click_image` / `click_color` | `waitFoundTimeoutMs` + `waitFoundIntervalMs`（**等到就点**：找不到按间隔轮询直到超时）、`durationMs` + `durationMsVarKey`（点击时长）、`elementRef`、`pick` |
+| `wait_for_vision` / `check_vision` | `negated`（结果取反）、`pick` |
+| `while_vision` | `negated` |
+| `scroll_until_vision` / `scroll_to_find` | `intervalMs` + `intervalMsVarKey`、`earlyEndOnNoChange`（画面无变化提前结束）、`useBezierCurve`、`outputs` |
+| `no_control_input` | `inputTextVarKey`、`focus/paste/backspace/enter` 四组坐标（各配 `*X/*Y/*XPct/*YPct/*PointVarKey`）、`submitTemplatePath`、`doBackspace` |
+| `ensure_screen_on` | `unlockAfterWake`（亮屏后解锁）、`wakeLockDurationMsVarKey` |
+| `run_code` | `codePath`（外部 JS 文件）、`templatePaths`、`timeoutMsVarKey` |
+| `http_request` | `urlVarKey`、`bodyVarKey`、`saveToPath`（响应落文件）、`timeoutMsVarKey` |
+| `file_action` | `pathVarKey`、`contentVarKey` |
+| `open_app` | `waitLoadedTimeoutMs`（等应用加载超时） |
+| `open_link` | `appPackageName` + `appActivityClassName`（**应用内跳转**，不走外部浏览器） |
+| `run_control` | `callTargetType`、`callActionTargetId/Name`（调用动作）、`nodeEnableMode`、`nodeEnableTargetIds/Names`、`nodeLimitRunCount`、`resetNodeStateScope` |
+| `run_script` | `scriptName`、`returnVarName`（子脚本返回值写到该变量） |
+| `trigger_virtual_button` | `longPressMs` + `longPressMsVarKey` |
+| `drag_to_target` | `targetOrder`（多结果取第几个）、`waitTimeoutMs`/`waitIntervalMs`（各配 VarKey）、`durationVarKey` |
+| `node_input` | `inputTextVarKey`、`submitTemplatePath`、`enterX/enterY/enterXPct/enterYPct` |
+| `node_double_click` / `wait_node` / `scroll_to_find` | `intervalMsVarKey` |
+| `node_swipe` | `durationMsVarKey` |
+| `tap` / `long_press` | `durationJitter`（时长抖动）、`elementRef`；`tap`/`multi_tap` 另有 `intervalJitter` |
+| `touch_down` / `touch_up` / `move_pointer` | `pointVarKey`、`holdMsVarKey`（按下保持）、`releaseMsVarKey`、`durationVarKey` |
+| `virtual_button` | `controlId/displayName`、`x/y(+Pct)`、`coordJitterMinPx/MaxPx`、`pressType`、滑动目标（`swipeTargetMode`/`swipeToX…`）、`swipeDirection/swipeAngleDeg/swipeDistancePx/swipeMode`、`overlayVisible/overlaySizeScale`、`cooldownMs/longPressMs`（均配 VarKey） |
+| `virtual_joystick` | `controlId/displayName`、`referenceMode/referencePointVarKey/referenceX(+Pct)`、`joystickCenterX/Y(+Pct)`、`joystickRadiusPx`、`deadZonePx`、`smoothFactor`、`updateIntervalMs`、`releaseDelayMs`、`overlayVisible`（均配关键 VarKey） |
+| `ai_vision` / `ai_reply` | `toolCallLimit`（工具调用上限，0=禁用）、`timeoutMs`、`retryTimes`、`retryIntervalMs`、`maxEdgePx`（发送图分辨率 0=默认 1536）、识别区域 `left/top/right/bottom(+Pct)`、`referenceImagePath` |
+| `ai_agent` | `actionsVar`（把可用动作清单写变量）、`retryTimes` |
+| 条件（`ConditionItem`） | 除原有 9 种外，还有 **`random`（随机成立）、`group`（子条件组）、`foreground_app`（前台应用是某包名）、`screen_stable`（画面稳定）** |
+
+> 数组类字段（`wallColors`/`points`/`pathNodes`/`segments` 等）**不能原地改**，只能整体重建后用 SetVar 写回（见 §4.3）。
 
 ## 附：快速索引（仅源码持有者可选，用于复核/校准）
 
