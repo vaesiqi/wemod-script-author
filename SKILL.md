@@ -21,7 +21,7 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
   - 无 `{{变量}}` 语法；变量引用是 **表达式直接写变量名**、**VarKey 字段直填**、**Prompt 模板 `${...}`** 三种。
   - 无三元运算符（用 `if(cond,a,b)` 函数）；数组**不能原地改**（只能整体重建后 SetVar）；无 ArrayPush 动作。
   - `run_code` 的 JS 里 `runtime.variables.set` 支持直接存 JS 数组（S1452：入口自动转 Kotlin List，表达式侧可索引/len/contains），JS 对象兜底转文本；写的是 LOCAL 作用域（子流程内返回回滚）。
-  - `repeat`/`while_var` 循环里可用 `break`/`continue`；`if` 不消费 break/continue。
+  - `repeat`/`while_var`/`foreach` 循环里可用 `break`/`continue`；`if` 不消费 break/continue。
   - `Repeat.times` 必须 >0（不支持无限次数）；无限循环用 `ActionConfig.repeat=-1` 或 `settings.runCount=0`。
   - 节点查找类动作（`node_*`/`find_and_*`/`wait_node` 等）**依赖无障碍服务**；纯坐标动作可走 Shizuku/root。
   - 视觉类动作（`*vision*`/`click_color`/`click_text`/`click_image`/`scroll_until_vision`）**依赖屏幕录制（MediaProjection）**。
@@ -136,6 +136,7 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 | `get_var` | GetVar | 变量拷贝。`sourceKey`→`targetKey`、`targetScope`；**`items`（多变量拷贝：每项 `sourceKey`→`key`）** |
 | `while_var` | WhileVar | 变量循环。`key`、`op`(LT/LE/EQ/NE/GE/GT)、`value`(Double 字面量)、**`valueVarKey`/`intervalMillisVarKey`/`maxIterationsVarKey`（上界/间隔/最大次数「从变量/表达式读取」：非空优先，失败回退字面量）**、`block`、`intervalMillis=200`、`maxIterations=10000` |
 | `while_vision` | WhileVision | 视觉循环。`condition`(VisionCondition)、`block`、`intervalMillis=200`、`timeoutMillis=10000`（可空=不限制）、`maxIterations=10000`、`retryTimes=0`(-1=直到命中)、`retryIntervalMs=200`；**上述数值字段都配有 `*VarKey`（`intervalMillisVarKey`/`timeoutMillisVarKey`/`maxIterationsVarKey`/`retryTimesVarKey`/`retryIntervalMsVarKey`）「从变量/表达式读取」，非空优先、失败回退字面量；`timeoutMillisVarKey` 解析得到 `<=0` 表示不限制** |
+| `foreach` | ForEach | 数组遍历（S-数据驱动-2）。`listExpr`（数据源：数组变量 / `lines(文本)` / `split(...)` / `jsonGet(...)`；**单个文本按一项**）、`itemVar`（当前项变量，默认 `当前项`）、`indexVar`（下标变量，可空）、`breakWhen`（提前结束表达式，单 `=` 会按 `==` 重试）、`skipWhen`（跳过本轮表达式）、`block`、`intervalMillis=0`、`maxIterations=10000`；**循环次数只由数据源长度决定**，空数据源一轮不跑，数据源解析失败软失败 `foreach_source_unresolved` |
 | `break` | Break | 终止最近一层循环（Repeat/While） |
 | `continue` | Continue | 跳过当前轮次进入下一轮 |
 
@@ -262,7 +263,7 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 
 > **AI 供应商与模型（S1450，`aiConfig.provider`）**：内置预设 `QWEN`(通义千问，模型 qwen-vl-plus/qwen-vl-max/qwen2.5-vl-72b-instruct)、`GLM`(智谱，glm-4v/glm-4v-plus/**glm-4v-flash 官方免费视觉模型**，三个 AI 动作零成本可用；设置页/属性面板模型下拉标「免费」)、`OPENAI`(gpt-4o-mini/gpt-4o/gpt-4.1-mini)、`DEEPSEEK`(deepseek-v4-flash/deepseek-v4-pro 纯文本 + **deepseek-v4-flash-vision-exp 多模态 2026-08 官方推出，可跑 ai_vision/ai_reply 视觉模式/ai_agent**；视觉能力按**模型级**判断 modelSupportsVision)、`CUSTOM`(自定义 baseUrl+model)。`baseUrl`/`apiKey` 走 App 全局 AI 设置（不落脚本 JSON，校验工具拦截明文 apiKey）；脚本内可用 `apiKeyVarKey` 指向变量做运行时覆盖。**模型下拉的候选 = 供应商预制 + 全局 AI 设置页手动添加的模型（单一事实源在设置页，可添加新模型/私有模型）**。
 | `http_request` | HttpRequest | method=GET/POST/PUT/DELETE/PATCH/HEAD、url、headers:Map、body、bodyType=TEXT/JSON/FORM_URLENCODED、timeoutMs=10000、retryTimes=0、responseType=TEXT/BYTES、responseBindToVar、statusCodeBindToVar |
-| `file_action` | FileAction | op=READ/WRITE/WRITE_BYTES/APPEND/DELETE/EXISTS/LIST_DIR/ENSURE_PATH、path、content、encoding="UTF-8"、bindToVar |
+| `file_action` | FileAction | op=READ/WRITE/WRITE_BYTES/APPEND/DELETE/EXISTS/LIST_DIR/ENSURE_PATH、path、content、encoding="UTF-8"、bindToVar、**parseMode=RAW/LINES/CSV/JSON（仅 READ：原文/按行数组/二维数组/宽松 JSON）** |
 | `global_action` | GlobalAction | **action**=BACK/HOME/RECENTS/NOTIFICATIONS/VOLUME_UP/VOLUME_DOWN/SCREENSHOT（截图键）/LOCK_SCREEN（电源键·短按锁屏）/POWER_MENU（电源键·长按菜单）/PASTE（粘贴键：优先无障碍"焦点粘贴"，无需 Shizuku；失败才回落 shell 注入） |
 | `key_event` | KeyEvent | **key**=按键（A~Z / 0~9 / DPAD_UP·DOWN·LEFT·RIGHT·CENTER / 符号 / ENTER·ESC·TAB 等功能键 / F1~F12）、modifiers=[SHIFT/CTRL/ALT/META]（组合键，如 Ctrl+C）、longPress（长按，仅单键）；**只能走 shell（Shizuku 或 root）**，组合键还需 Android 12+ 的 input keycombination |
 | `shell_command` | ShellCommand | **command**（任意 shell 命令，支持 `${变量}` 插值；不做白名单，白名单只约束 AI 的 run_shell）、bindResultToVar（把**完整输出**写入变量，留空则不写）；**只能走 shell（Shizuku 或 root）**，无障碍后端跑不了；输出进运行日志（截断 2000 字符）；执行前**默认弹确认框**（同意 / 不同意 / 本次运行始终允许），设置页「执行确认」可关 |
@@ -499,11 +500,12 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 
 - `NodeWaitResultBindings`（wait_node/check_node 的 `outputs`）：`matchedVar/existsVar/elapsedMsVar/pointVar("x,y")/boxVar("left,top,right,bottom")/textVar/classNameVar/viewIdVar`，全部 `""` 表示不写。
 - `NodeInfoResultBindings`（get_node_info 的 `outputs`，P1-2）：`existsVar/matchedVar/textVar/descriptionVar/viewIdVar/classNameVar/packageNameVar/pointVar/boxVar/checkedVar/checkableVar/enabledVar/clickableVar/longClickableVar/focusableVar/focusedVar/scrollableVar/editableVar/selectedVar/visibleVar/depthVar/indexVar/stablePathVar`；节点不存在时仅写 exists/matched，其余不写。
-- `VisionResultBindings`（视觉动作 `outputs`）：`matchedVar/hitCountVar/scoreVar/scoresVar/pointVar/pointsVar/boxVar/boxesVar/textVar/textsVar/allTextVar/**allTextFormat**/numberVar/numbersVar/messageVar`。
+- `VisionResultBindings`（视觉动作 `outputs`）：`matchedVar/hitCountVar/scoreVar/scoresVar/pointVar/pointsVar/boxVar/boxesVar/textVar/textsVar/allTextVar/**allTextFormat**/numberVar/numbersVar/**numberExtractMode**/**numberPattern**/messageVar`。
   - `allTextVar` = **范围内全部识别文本**；`allTextFormat=CONCAT_TEXT`（默认，所有行**直接拼接成一整段**，无分隔符）/ `RAW_INFO`（JSON 详情数组，含每段文本与文本框）。
+  - `numberExtractMode`（S-正则友好-1）：数字提取规则，默认 `SMART`（千分位+小数算一个数，`43,123,456.01` → `43123456.01`）/ `PLAIN`（旧行为，按连续数字串切）/ `CUSTOM`（`numberPattern` 自定义正则，优先取第 1 个捕获组；为空或非法回落 SMART）。
 - **视觉识别行为要点（写脚本必知）**：
   - **OCR 是「行级」匹配**：`text_exists` 对每个 OCR 识别行**独立判定**（关键词必须与该行内的目标内容同行才会命中）。不同厂商 OCR 的行切分不同（实测 OPPO 会把「距我」与数字拆到不同行）→ 需要跨行取值时，用 `allTextVar` 拿整段文本再用 `run_code`(JS) 自行解析，不要依赖行结构。
-  - **命中行会自动提取数字**：`numbersVar` = 命中行内**全部数字**（正则 `-?\d+(?:\.\d+)?`，顺序保持）；`numberVar` = 首个数字。例：「全程4.16km」→ `[4.16]`；若「全程4.16km 距我25.29km」同在一行 → `[4.16, 25.29]`。
+  - **命中行会自动提取数字**：`numbersVar` = 命中行内**全部数字**（按 `numberExtractMode` 切分，默认 SMART 规则 `[-+]?\d{1,3}(?:[,，]\d{3})+(?:\.\d+)?|[-+]?\d+(?:\.\d+)?`，顺序保持）；`numberVar` = 首个数字。例：「全程4.16km」→ `[4.16]`；「金额 43,123,456.01元」→ `[43123456.01]`（旧 PLAIN 规则会得到 `[43, 123, 456.01]`）。
   - `regex=true` 时用正则匹配行文本（命中即 1.0 分，不受匹配阈值 `similarity` 影响）；正则模式下 `texts`/`allTextVar` 仍按行收集。
 - **WaitNode 超时**：先写变量（matched=false）再抛软失败（不中断脚本）；CheckNode 单次检测无条件继续。
 
@@ -598,7 +600,8 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 | 类型转换 | `number text bool extractNumber array numbers texts bools coords point` |
 | 坐标/向量 | `x y rectLeft rectTop rectRight rectBottom rectWidth rectHeight rectCenter offset dx dy distance midpoint angle angleRad project vector length magnitude normalize dot cross heading headingRad between pointInRect pointInCircle lerp lerpPoint remap` |
 | 文本 | `trim upper lower replace startsWith endsWith` |
-| 正则/JSON（P0-3） | `regexMatch(text,pattern)`、`regexExtract(text,pattern,group=0)`、`regexReplace(text,pattern,repl)`、`jsonGet(json,"a.b[0].c")`（宽松解析，null→null 值） |
+| 正则/JSON（P0-3 + S-正则友好-2） | `regexMatch(text,pattern)`、`regexExtract(text,pattern,group=0)`、`regexReplace(text,pattern,repl)`、`regexFindAll(text,pattern)`、`regexPattern(regex)`、`jsonGet(json,"a.b[0].c")`（宽松解析，null→null 值）。`pattern` 可写正则字面量 `/模式/flags`（`i` 忽略大小写、`m` 多行、`s` 点匹配换行、`x` 忽略空白），也可写文本 `"\\d+"`；正则字面量里反斜杠不用转义，例：`regexExtract(金额文本, /[\d,]+\.\d{1,2}/)`。 |
+| 数据查找（S-数据驱动-1） | `lines(text)`（拆行去空行）、`splitPick(text,sep,n)`（取第 n 列，0 基/负索引，越界空串）、`findContains(arr,sub)`、`findIndexContains(arr,sub)`（无命中 -1）、`filterContains(arr,sub)`、`indexOf(arr,value)`（完全相等，无命中 -1）、`findLike(arr,text,threshold=0.8)`（按"行内最优窗口"相似度找最像的一条）、`mapPick(arr,sep,n)`、`pickExcluding(arr,used)`（随机取未用过的，全用给空串；**纯函数不回写 used**）、`similarity(a,b)`（0~1，与视觉模糊匹配同算法）。题库脚本标准写法：`findContains(题库行, 题目文本)` → `splitPick(命中行,"\|",1)`，不需要写循环。 |
 | 逻辑 | `if(cond,a,b) coalesce(...)` |
 | 随机 | `random() random(lo,hi) randInt(lo,hi) randFloat(lo,hi) chance(p) randomChoice(...) shuffle(...) sample(arr,n)` |
 | 动态变量 | `var(name) get(name)` 按字符串名读变量 |
@@ -715,7 +718,7 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 **JS 桥接边界（写 run_code 前必读）**：
 - **JS 数组可直接存成变量数组**（S1452 已落地）：`runtime.variables.set` 入口自动把 Rhino `NativeArray` 递归转成 Kotlin `List`，表达式侧可直接 `题库[i]` 索引、`len(题库)`、`contains`；JS 对象（Scriptable）兜底转文本。旧脚本的 `join(分隔符)` + `split` 技巧仍兼容。
 - `runtime.variables.set` 写 **LOCAL** 作用域（子流程内返回后回滚）。
-- 表达式字符串字面量**不支持 `\uXXXX` 转义**（反斜杠被剥掉），分隔符请用可见字符（如 `|`）。
+- 表达式字符串字面量里**只有 `\\`、`\"`、`\'` 是转义**；其余反斜杠原样保留（S-正则友好-2 起），所以 `"\d+"` 与 `"\\d+"` 都得到正则 `\d+`。`\uXXXX` 仍不会被解释成字符，分隔符请用可见字符（如 `|`）。裸写 `\d+`（不加引号也不加斜杠）会报错。
 - JS 执行有 `timeoutMs`（默认 30000）；异常包装成 `{name, message}` 对象（不会崩 JavaMembers）。结果可用 `bindResultToVar` 写回变量（转字符串）。
 
 ### 5.6 虚拟控件（virtualControls + virtualControlSchemes）
@@ -744,6 +747,35 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 7. **虚拟控件做挂机**：`virtual_button` + `triggerVarKey` 变量（由 `run_code`/变量面板驱动）或 `trigger_virtual_button` 动作直接触发。
 8. **防检测**：`config.coordJitterMinPx/MaxPx` 加随机抖动；`preDelayRandomRangeMs` 随机前置延迟。
 9. **变量批量操作**：同一处要对多个变量赋值/自增/拷贝 → **一个节点 + `items`**（条目可混 set/inc/get，见 4.3），**不要堆一排 `set_var`**；循环体里"每轮重置多个统计量"也照此写。
+10. **数据驱动（题库 / 评论库 / 名单）**：先判断"能不能一次表达式算出来"——
+    - **能** → 用函数，别写循环：`findContains`（找含某文字的行）、`findLike`（OCR 容错找）、`splitPick`（取某列）、
+      `mapPick`（取整列）、`pickExcluding`（随机取未用过的）、`lines`（拆行）。
+    - **不能**（每项要做多个动作、或每项要多次识别）→ 用 `foreach`。
+
+    典型的"少节点"写法（5 个节点，替代「手搓 WhileVar + at + IncVar + Break」）：
+
+    ```json
+    { "type": "action", "action": { "type": "file_action", "op": "READ", "path": "", "pathVarKey": "题库文件路径",
+      "bindToVar": "题库行", "parseMode": "LINES" }, "comment": "按行解析，直接得到数组" },
+    { "type": "set_var", "key": "命中行", "value": { "kind": "expression",
+      "expression": "findContains(题库行, 题干关键词)", "resultType": "TEXT" }, "comment": "一步找命中行" },
+    { "type": "set_var", "key": "答案", "value": { "kind": "expression",
+      "expression": "splitPick(命中行, \"|\", 1)", "resultType": "TEXT" }, "comment": "取第 2 列" }
+    ```
+
+    需要"逐项做多步"时才用 `foreach`（示例：批量名单点开 → 输入 → 提交）：
+
+    ```json
+    { "type": "foreach", "listExpr": "名单", "itemVar": "当前目标", "indexVar": "已处理数",
+      "skipWhen": "startsWith(当前目标, \"#\")", "breakWhen": "当前目标 == \"END\"",
+      "intervalMillis": 800, "maxIterations": 200,
+      "block": { "nodes": [ /* 点开、输入、提交 */ ] } }
+    ```
+
+    三条硬边界：① **循环次数只由数据源长度决定**（`breakWhen` 只提前结束、`skipWhen` 只跳过本轮）；
+    ② 数据源为空 ⇒ 一轮都不跑；数据源解析失败 ⇒ 软失败 `foreach_source_unresolved`（不静默）；
+    ③ 数据源若只有一个文本，按"一项"处理 —— 想按行遍历要先 `lines(文本)` 或用 `file_action.parseMode=LINES`。
+    ④ `itemVar`/`indexVar` 是 **LOCAL** 作用域，子流程内写入会被回滚（跨流程回传用 GLOBAL）。
 
 ## 7. 交付自查清单（对 ScriptValidator 规则逐项）
 
@@ -758,6 +790,12 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 - [ ] 坐标双写：像素 `x/y` + 百分比 `xPct/yPct`（0~1 之间）；区域 `left/top/right/bottom` + `leftPct/topPct/rightPct/bottomPct`；虚拟控件给 `xPct/yPct`；**单指/多指要逐 pathNode 双写，`multi_tap`/`long_press`/`swipe`/`move_pointer`/`drag_to_target` 同理**。
 - [ ] **作者归属**：`publishMeta.community_author_user_id` 已按用户确认的**本人数字 uid** 填好（见 2.3）；若留空，交付说明里必须写明"导入后需在 App 脚本详情页「声明我是作者」才能发布社区"。
 - [ ] **循环数值字段可变量化**：`repeat.timesVarKey`/`intervalMillisVarKey`、`while_var.valueVarKey`/`intervalMillisVarKey`/`maxIterationsVarKey`、`while_vision.intervalMillisVarKey`/`timeoutMillisVarKey`/`maxIterationsVarKey`/`retryTimesVarKey`/`retryIntervalMsVarKey` 支持**变量名或表达式**；`times` 仍必填（用 VarKey 时给兜底数字，但**运行时以变量为准**）。
+- [ ] **`foreach` 必填与护栏**：`listExpr`（数据源）与 `itemVar`（当前项变量）不能为空；给 `maxIterations`（默认 10000）
+      防数据源异常过大；`breakWhen`/`skipWhen` 写的是**布尔表达式**（用 `==` 比较，单个 `=` 会按 `==` 重试并告警）。
+      数据源为空 ⇒ 一轮不跑（不是报错）；数据源解析失败 ⇒ 软失败 `foreach_source_unresolved`。
+- [ ] **数据驱动优先用函数**：能在一次表达式里算完的（找命中行 / 取列 / 随机取未用 / 统计）用
+      `findContains`/`findLike`/`splitPick`/`mapPick`/`pickExcluding`，不要用 `while_var`/`foreach` 手搓循环
+      （见 §6 第 10 条，附可直接复制的 JSON）。
 - [ ] **变量赋值时序**：所有 `*VarKey` 指向的变量必须在**执行到该动作之前**已赋值——未定义 / 值为空 / 表达式失败 ⇒ 动作**软失败**（不再用字面量兜底，见 §0）。跨分支使用的变量要在每个分支内都赋值，别指望"没准备好就走默认值"。
 - [ ] **多点比色/找色**（3.5.1）：`points[].tolerance` 不能为负；`N_OF` 的 N 不超过采样点数（比色用 `requiredMatchCount`、找色用 `pointsRequiredMatchCount`）；**多点找色必须 `color_region.matchMode="FIND_TARGETS"`**（否则 points 不生效）；`dxPct/dyPct` 是相对锚点的偏移（未设置用 `-2`，不要写 0 表示"没设"）。
 - [ ] 运行需求齐备：有节点查找 → 提示无障碍；有视觉 → 提示屏幕录制；纯坐标可提示 Shizuku/root 可选。
@@ -798,7 +836,7 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 | `ensure_screen_on` | `unlockAfterWake`（亮屏后解锁）、`wakeLockDurationMsVarKey` |
 | `run_code` | `codePath`（外部 JS 文件）、`templatePaths`、`timeoutMsVarKey` |
 | `http_request` | `urlVarKey`、`bodyVarKey`、`saveToPath`（响应落文件）、`timeoutMsVarKey` |
-| `file_action` | `pathVarKey`、`contentVarKey` |
+| `file_action` | `pathVarKey`、`contentVarKey`、**`parseMode=RAW/LINES/CSV/JSON`（仅 READ：原文 / 按行数组 / 二维数组 / 宽松 JSON）** |
 | `open_app` | `waitLoadedTimeoutMs`（等应用加载超时） |
 | `open_link` | `appPackageName` + `appActivityClassName`（**应用内跳转**，不走外部浏览器） |
 | `run_control` | `callTargetType`、`callActionTargetId/Name`（调用动作）、`nodeEnableMode`、`nodeEnableTargetIds/Names`、`nodeLimitRunCount`、`resetNodeStateScope` |

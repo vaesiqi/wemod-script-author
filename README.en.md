@@ -36,6 +36,7 @@ wemod-script-author/
 │   ├── branch-conditions-001.axs      # branches and loops: if + condition groups (ALL / N_OF) + var_switch + while_var + while_vision
 │   ├── notification-trigger-001.axs   # notification trigger: run a subflow when a matching notification arrives
 │   ├── variables-batch-items-001.axs  # batching variables: one node + items to set/inc/copy many variables at once
+│   ├── data-quiz-foreach-001.axs      # data-driven + foreach loop: read a quiz file by lines (file_action parseMode=LINES) → iterate rows → tap the answer on match, then break
 │   ├── color-multi-point-001.axs      # multi-point color: color_at.points and color_region (FIND_TARGETS + points + findDirection) → hit point into a variable, then tap it
 │   └── window-trigger-001.axs         # window trigger: run when the target window appears
 ├── tools/

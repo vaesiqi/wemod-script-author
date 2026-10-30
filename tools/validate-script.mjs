@@ -25,7 +25,7 @@ import { readFileSync } from 'node:fs';
 const NODE_TYPES = new Set([
   'action', 'if', 'var_switch', 'repeat', 'block', 'try_catch', 'race',
   'subflow_def', 'call_subflow', 'event_listener', 'label', 'goto',
-  'set_var', 'inc_var', 'get_var', 'while_var', 'while_vision',
+  'set_var', 'inc_var', 'get_var', 'while_var', 'while_vision', 'foreach',
   'break', 'continue',
 ]);
 
@@ -198,6 +198,7 @@ const NODE_REQUIRED = {
   get_var: ['sourceKey', 'targetKey'],
   while_var: ['key', 'op', 'block'],
   while_vision: ['condition', 'block'],
+  foreach: ['listExpr', 'itemVar', 'block'],
   break: [], continue: [],
 };
 
@@ -706,6 +707,13 @@ function checkNode(node, path, inStructural = false) {
   } else if (type === 'while_var') {
     checkEnum(node.op, COMPARE_OPS, 'op', p);
     if (node.maxIterations === undefined) warn('while_var 建议显式 maxIterations 防死循环', p);
+  } else if (type === 'foreach') {
+    // S-数据驱动-2：遍历循环的必填项与护栏
+    if (!node.listExpr) error('foreach 缺少 listExpr（数据源：数组变量 / lines(文本) / split(...)）', p);
+    if (!node.itemVar) error('foreach 缺少 itemVar（当前项写入的变量名）', p);
+    if (node.maxIterations === undefined) warn('foreach 建议显式 maxIterations 防数据源异常过大', p);
+    if (node.breakWhen && typeof node.breakWhen !== 'string') error('foreach.breakWhen 必须是表达式文本', p);
+    if (node.skipWhen && typeof node.skipWhen !== 'string') error('foreach.skipWhen 必须是表达式文本', p);
   } else if (type === 'repeat') {
     if (typeof node.times === 'number' && node.times <= 0) error('repeat.times 必须 > 0（-1/0 不支持无限）', p);
   } else if (type === 'set_var') {
