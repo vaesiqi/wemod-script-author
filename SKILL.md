@@ -777,6 +777,19 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
     ③ 数据源若只有一个文本，按"一项"处理 —— 想按行遍历要先 `lines(文本)` 或用 `file_action.parseMode=LINES`。
     ④ `itemVar`/`indexVar` 是 **LOCAL** 作用域，子流程内写入会被回滚（跨流程回传用 GLOBAL）。
 
+    **多选题**（答案列 `苹果#香蕉`）不要写 `repeat + 索引 + split[i]`，一行数据源搞定：
+
+    ```json
+    { "type": "foreach", "listExpr": "lines(replace(答案列, \"#\", \"\\n\"))", "itemVar": "当前选项",
+      "intervalMillis": 500, "maxIterations": 20,
+      "block": { "nodes": [ { "type": "action", "action": { "type": "click_text",
+        "condition": { "type": "text_exists", "leftPct": 0, "topPct": 0, "rightPct": 1, "bottomPct": 1,
+          "text": "", "textVarKey": "当前选项" } } } ] } }
+    ```
+
+    要点：`#` 先换成换行再用 `lines()` 拆 —— `lines()` 会**去掉空行**，所以"单选（只有一项）"和
+    "答案列为空"都天然正确（空答案 ⇒ 零轮，不会去点空文字）；`intervalMillis` 给 500ms 防连点被吞。
+
 ## 7. 交付自查清单（对 ScriptValidator 规则逐项）
 
 - [ ] 节点树完整闭合：每个 `if`/`repeat`/`while_*`/`try_catch`/`race`/`subflow_def`/`var_switch` 都有 block，`block.nodes` 存在（可空数组）。

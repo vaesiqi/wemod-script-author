@@ -37,6 +37,7 @@ wemod-script-author/
 │   ├── notification-trigger-001.axs   # 通知触发：收到指定内容通知时执行子流程
 │   ├── variables-batch-items-001.axs  # 变量批量操作：1 个节点 + items 一次定义/自增/拷贝多个变量（条目可混 set/inc/get）
 │   ├── data-quiz-foreach-001.axs      # 数据驱动 + 遍历循环：file_action(parseMode=LINES) 按行读题库 → foreach 逐题取题干/答案 → 命中点答案并 break
+│   ├── data-quiz-multi-001.axs        # 多选题：答案列 # 分隔 → lines(replace(...)) 拆成选项数组 → foreach 逐个点选（单选/空答案天然正确）
 │   ├── color-multi-point-001.axs      # 多点比色 / 多点找色：color_at.points 与 color_region（FIND_TARGETS + points + findDirection）→ 命中点写变量再点击
 │   └── window-trigger-001.axs         # 窗口触发：指定窗口出现时执行
 └── tools/
