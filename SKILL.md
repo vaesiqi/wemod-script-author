@@ -1,6 +1,6 @@
 ---
 name: wemod-script-author
-description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真实能力，把用户需求编写成可直接导入 App 并运行的脚本 JSON（节点/块/动作/条件/变量/虚拟控件全能力），并做能力边界自查。
+description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真实能力，把用户需求编写成可直接导入 App 并运行的脚本 JSON（节点/块/动作/条件/变量/虚拟控件全能力），含运行前 H5 菜单与运行期 H5 页面（runGate / window.wemod / runtime.h5），并做能力边界自查。
 ---
 
 # WeMod 自动化脚本作者
@@ -8,9 +8,9 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 本技能蒸馏自 `script-runtime/src/main/kotlin/com/wemod/automation/model/`（动作模型）、`core/expression/`（变量引擎）、`core/execution/`（执行引擎）的真实实现。目标是：**拿到用户一句需求，写出一份字段全部真实存在、语义符合执行引擎、能通过 ScriptValidator 的脚本 JSON**。
 
 > **自包含使用说明（放 GitHub 给别人用时先读这里）**
-> - **本技能包运行时零源码依赖**：写脚本所需的全部字段名/枚举值/语义都已内嵌在本文档（§3~§5），加上 `examples/` 黄金样例与 `tools/validate-script.mjs` 离线校验器，**不拥有 WeMod 源码也能写出可导入运行的脚本**。
+> - **本技能包运行时零源码依赖**：写脚本所需的全部字段名/枚举值/语义都已内嵌在本文档（§3~§6），加上 `examples/` 黄金样例与 `tools/validate-script.mjs` 离线校验器，**不拥有 WeMod 源码也能写出可导入运行的脚本**。
 > - 使用流程：读本文档 → 对照 `examples/auto-douyin-skin-001.axs` → 写 JSON → `node tools/validate-script.mjs 你的脚本.axs` 预检 → 改后缀 `.axs` 导入手机 App。
-> - 数据基准：script-runtime 模型快照 **2026-09-28**（本轮校准：新增 **Shell 命令** 动作 `shell_command`（任意命令 + 结果写变量 + 执行前确认；只走 shell，需 Shizuku 或 root）、**按键注入** `key_event`（74 键 + 组合键，组合键需 Android 12+）、`take_screenshot.saveTarget`（自定义路径 / 系统相册）、`global_action` 扩到 10 项（音量 / 截图键 / 锁屏 / 电源菜单 / 粘贴）；上一轮（2026-09-16）校准：识别侧补 `allTextFormat`/`templatePath` 资源外置/`colorVarKeys` 附加颜色从变量读/`suppressRadius` 等字段与 **OCR 行级匹配行为**；变量侧补 `ConsoleVariableBinding` 的 `label/description/group/layoutMode`；JS 侧修正 `setCookie/getCookie` 首参为 URL）。若你手机上的 App 版本与技能包版本不一致，先导入一个样例脚本实测；不一致时以 App 内的模型为准（维护者校准流程见技能包 README「维护」）。
+> - 数据基准：script-runtime 模型快照 **2026-09-28**（本轮校准：新增 **Shell 命令** 动作 `shell_command`（任意命令 + 结果写变量 + 执行前确认；只走 shell，需 Shizuku 或 root）、**按键注入** `key_event`（74 键 + 组合键，组合键需 Android 12+）、`take_screenshot.saveTarget`（自定义路径 / 系统相册）、`global_action` 扩到 10 项（音量 / 截图键 / 锁屏 / 电源菜单 / 粘贴）；上一轮（2026-09-16）校准：识别侧补 `allTextFormat`/`templatePath` 资源外置/`colorVarKeys` 附加颜色从变量读/`suppressRadius` 等字段与 **OCR 行级匹配行为**；变量侧补 `ConsoleVariableBinding` 的 `label/description/group/layoutMode`；JS 侧修正 `setCookie/getCookie` 首参为 URL）。**2026-11-04 校准（H5，只改文档）**：新增 **§6 H5 章节**（运行前菜单 `project.json → runGate`、页面 API `window.wemod`、脚本侧 `runtime.h5`、`wemod.screen()`、窗口尺寸优先级、常见坑与自查）；动作模型 / 校验器**无变更**。若你手机上的 App 版本与技能包版本不一致，先导入一个样例脚本实测；不一致时以 App 内的模型为准（维护者校准流程见技能包 README「维护」）。
 > - 完整导入请走 **`.axs` 文件**（保留控制台变量/设置/虚拟控件）；编辑器「粘贴 JSON」只插节点、不带顶层字段。
 
 ## 0. 定位与边界
@@ -28,13 +28,14 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
   - 写脚本时所有坐标/区域**同时给像素值（`x/y`）和百分比（`xPct/yPct`）**：运行时 `xPct` 在 `0f..1f` 时优先按百分比×当前屏幕，否则回退像素值；`xPct=-1f` 表示"未设置"。**单指/多指手势的每个路径节点也照此双写**（见 3.2.1）。
   - **多个变量一律合并**：同一处要初始化/修改/拷贝多个变量时，**必须写成一个变量节点 + `items`**（`set_var`/`inc_var`/`get_var` 都支持，条目还能混用 set/inc/get），**不要串成一排同名节点**（见 4.3）——逐个 `set_var` 是最常见的退化写法。
   - **变量解析失败 = 软失败（不再回退字面量）**：**参数类**字段（坐标/时长/间隔/次数/超时/文本内容/链接/路径/虚拟控件参数）的 `*VarKey` 一旦非空，运行时**必须**解析成功——变量**未定义** / 值为 **null 或空白串** / 表达式**求值失败** ⇒ 动作**按失败处理**（走 `onFail`/`retryTimes`/`STOP` 等失败策略，运行日志写明「字段名 + 变量名 + 原因」）。唯一例外：变量值**类型不可转**（如文本当坐标）⇒ 记警告并回落字面量。**条件类**（视觉条件的颜色/文字/模板/区域变量、条件组重试次数）解析失败按「不成立 / 回退」处理，**不中断**流程，但同样会写日志。
+  - **H5 只有两个面**：**运行前菜单**（项目级 `project.json → runGate`，脚本还没跑）与**运行期页面**（脚本里 `runtime.h5.*` 打开）；页面侧 API 是 `window.wemod`，脚本侧是 `runtime.h5`。窗口尺寸按 §6.5 的优先级决定，**CSS 宽高改不了窗口**。JS 里**没有** `runtime.log`（见 §6.8），H5 全部细节见 **§6**。
 
 ## 1. 交付流程（五步）
 
-1. **澄清需求**：目标 App/页面、要完成的流程、循环条件、变量需求、是否需要虚拟控件/弹窗交互/网络/文件；**作者归属必问**——社区用户 uid（数字）+ 昵称，写进 `publishMeta`（见 2.3，决定脚本导入后能不能发布到社区）。缺关键信息就问（屏幕基准分辨率可默认 1080×2400）。
-2. **结构设计**：画节点树——主流程块 + 循环（`repeat`/`while_var`/`while_vision`）+ 分支（`if`/`var_switch`）+ 子流程（`subflow_def`/`call_subflow`）+ 事件监听（`event_listener`）。需要用户可调参数 → 加 `consoleVariables` 面板变量。
+1. **澄清需求**：目标 App/页面、要完成的流程、循环条件、变量需求、是否需要虚拟控件/弹窗交互/网络/文件、是否需要运行前 H5 菜单或运行期 H5 页面（H5 面见 §6）；**作者归属必问**——社区用户 uid（数字）+ 昵称，写进 `publishMeta`（见 2.3，决定脚本导入后能不能发布到社区）。缺关键信息就问（屏幕基准分辨率可默认 1080×2400）。
+2. **结构设计**：画节点树——主流程块 + 循环（`repeat`/`while_var`/`while_vision`）+ 分支（`if`/`var_switch`）+ 子流程（`subflow_def`/`call_subflow`）+ 事件监听（`event_listener`）。需要用户可调参数 → 加 `consoleVariables` 面板变量；需要 H5 菜单/面板 → 同时产出 `project.json` 的 `runGate` 片段与页面文件（见 §6）。
 3. **编写 JSON**：按第 2~5 节填字段。默认值可省略（序列化 `encodeDefaults=false`，未知字段忽略，数值非法值可被导入器 coerce）。**同一处的多个变量赋值/自增/拷贝合并成一个节点 + `items`**（见 4.3），不要串成一排变量节点。
-4. **静态自查**：按第 7 节清单逐项过一遍（引用目标存在、循环可退出、需求权限齐全、坐标双写、**变量已按 items 合并**）。
+4. **静态自查**：按第 8 节清单逐项过一遍（引用目标存在、循环可退出、需求权限齐全、坐标双写、**变量已按 items 合并**）。
 5. **离线预检**：`node tools/validate-script.mjs <脚本.axs>` 跑一遍校验器，零错误才交付。
 6. **交付**：输出完整 JSON + 一句话说明（运行需求：无障碍/Shizuku/root/屏幕捕获；导入方式：改后缀 `.axs` 用 App 打开导入）。
 
@@ -66,6 +67,7 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 
 - `root.nodes` 是唯一必填执行体；`settings` 可省（有默认值）。`runCount=0` 表示无限次循环执行整个脚本。
 - 变量**没有**独立"变量区"：变量在节点树里用 `set_var`/`inc_var`/`get_var` 内联定义；控制台可调参数用顶层 `consoleVariables` 声明。
+- **H5 运行前菜单的 `runGate` 不在这里**：它是**项目级**配置，写在 `project.json`（脚本 JSON 顶层没有 runGate 字段，见 §6.1）。
 - 其余顶层字段：`consolePresets`（控制台预设）、`virtualControls`/`virtualControlSchemes`（虚拟控件与布局方案）、`confirmedCheckItems`（运行前确认项）、`createdAt`/`updatedAt`；另有**发布/分享元数据字段**（`publishMeta`/`importedFromShare`/`encryptedSource`/`nodeCountHint`/`resolutionWarningSuppressed`）。除 **`publishMeta.community_author_user_id` 必须由作者提供**（见 2.3）外，其余都由 App 维护、手写脚本可省略。
 - 序列化：判别字段统一为 **`"type"`**（sealed class 子类的 `@SerialName`），字段名即 Kotlin 属性名。必填字段 = 无默认值的字段。
 
@@ -623,7 +625,7 @@ description: 依据 WeMod 项目动作模型、变量引擎与执行引擎的真
 
 ### 5.1 启动与生命周期
 
-- 运行前 `ScriptValidator.validate` 静态校验，**任何 ERROR 级问题直接拒绝执行**（见第 7 节清单）。
+- 运行前 `ScriptValidator.validate` 静态校验，**任何 ERROR 级问题直接拒绝执行**（见第 8 节清单）。
 - `settings.runCount` 轮次主循环；`runCount=0` 无限循环（脚本级）。每轮跑完 `root` 后等待全部异步事件 Job 完成。
 - 停止/暂停/来电自动暂停均由 ExecutionManager 统一处理；脚本内用 `run_control`（PAUSE/STOP）控制。
 - 运行结束时：正常=SUCCESS；用户停止或 STOP 策略=CANCELLED；其它异常=FAILED（`pauseOnRuntimeError=true` 时暂停等待人工恢复）。
@@ -711,6 +713,7 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 | `runtime.process` | `log(msg)` `warn(msg)` `error(msg)` `stop(reason?)` `pause()` |
 | `runtime.crypto` | `md5(s)` `sha256(s)` `hmacSha256(s,key)` `base64Encode(s)` `base64Decode(s)` |
 | `runtime.cookies` | `setCookie(url,cookieString)` `getCookie(url)` `clearCookies()` —— **⚠️ 首参是 URL**（如 `https://mtop.damai.cn/`），不是 cookie 名；`setCookie` 传入 `"k=v; k2=v2"` 形式的整串 |
+| `runtime.h5` | `open(path,widthDp,heightDp,title)` → 句柄（失败空串）/ `close(handle)` / `closeAll()` / `wait(handle,event,timeoutMs)` → JSON 文本或 `null` / `emit(handle,event,data)` —— **H5 页面与窗口的完整语义见 §6** |
 | 全局 `console` | `log(msg)` `warn(msg)` `error(msg)` |
 
 > ⚠️ **命名踩坑（早期文档写错过）**：是 `variables`/`screen`/`nodes`/`network`/`files`，**不是** `vars`/`sys`/`node`/`net`/`file`；`findAndInput` 在 `touch` 命名空间，不在 `nodes`。
@@ -736,7 +739,347 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 - 布局方案 `virtualControlSchemes`：`{id,name,scope=NORMAL/GLOBAL,items:[{controlId,xPct,yPct,swipeToXPct,swipeToYPct,sizeScale,visible}]}`；运行中可 `switch_virtual_control_scheme` 切换。
 - 坐标解析优先级：布局方案覆盖 → pointVarKey 变量 → 静态布局点。
 
-## 6. 常用设计模式
+## 6. H5 页面与运行前菜单（runGate / window.wemod / runtime.h5）
+
+> 本节是**唯一需要写 HTML** 的地方。脚本作者能看到的 H5 面只有**两个**，两面的页面侧 API 是同一个 `window.wemod`，区别在「声明在哪」与「有哪些入口」：
+
+| 面 | 何时出现 | 声明在哪 | 页面侧关键入口 |
+|---|---|---|---|
+| **运行前菜单**（项目级） | 脚本启动**之前**（用户点运行 → 先出菜单） | 项目级 `project.json → runGate` | `wemod.start(values?)` 写变量并放行脚本、`wemod.cancel()`、`wemod.rerun(values?)` |
+| **运行期页面**（脚本级） | 脚本运行中弹出 | 脚本 `run_code` 里 `runtime.h5.open(...)` | 页面→脚本 `wemod.emit`（脚本 `runtime.h5.wait` 收）、脚本→页面 `runtime.h5.emit`（页面 `wemod.on` 收）、窗口方法 |
+
+选面口径：**跑之前要用户填参数/选配置 → 运行前菜单**；**跑起来中途要显示进度、收集一次选择、做结算页 → 运行期页面**。
+
+内置示例项目（帮助中心 → 示例中心可直接打开对照）：
+
+- `sample_project_h5_gate` —— 运行前菜单；
+- `sample_project_h5_events` —— 运行期事件面板。
+
+### 6.1 运行前菜单：项目级 `project.json → runGate`
+
+`runGate` 是**项目级**配置（在 `project.json` 里），**不在脚本 JSON 里**；交付时要把「`project.json` 片段 + 页面文件」一起给。
+
+字段（App 的「项目信息」对话框与手写 `project.json` 改的是**同一份字段**，改哪边都生效）：
+
+| 字段 | 类型 / 取值 | 语义 |
+|---|---|---|
+| `kind` | 目前只有 `"h5"` | 菜单类型；写 `h5` 才走 H5 菜单 |
+| `path` | 项目内相对路径，**区分大小写**（如 `ui/menu.html`） | 菜单页面文件 |
+| `widthDp` / `heightDp` | 数字（dp） | 初始窗口尺寸（dp） |
+| `title` | 字符串 | **非空 = 宿主画可拖动标题栏**；**空串 = 标题栏由页面自己画** |
+| `snapAfterStart` | 字符串，如 `"left:28"` | 菜单出现后自动贴边 |
+| `keepOnScriptEnd` | 布尔 | `true` = 脚本结束后菜单保留，直到用户关闭控制台 |
+
+```json
+{
+  "runGate": {
+    "kind": "h5",
+    "path": "ui/menu.html",
+    "widthDp": 320,
+    "heightDp": 460,
+    "title": "",
+    "snapAfterStart": "left:28",
+    "keepOnScriptEnd": true
+  }
+}
+```
+
+- **与 `.ui.json` 参数页互斥**：一个项目里两者只能用一个；同时配了的话 **H5 优先**（原来的参数页不再生效）。
+- 菜单页用 `wemod.getVar/vars/setVar` 读写变量；点 `start` 时才把值写回并放行脚本（页面侧写法见 6.2）。
+
+### 6.2 菜单页最小骨架（可直接照抄）
+
+完整文件，存成 `ui/menu.html`（`runGate.path` 指向它）：
+
+```html
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <!-- 初始窗口尺寸（宽x高，dp）：宿主在开窗前解析本标签、不执行页面；优先于项目信息的 runGate.widthDp/heightDp -->
+  <meta name="wemod-size" content="320x460">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    /* 首帧就给底色，避免透明首帧白闪 */
+    html, body { margin: 0; background: #12141a; color: #e8eaf0;
+                 font: 14px/1.5 system-ui, -apple-system, sans-serif; }
+    /* 不依赖 html,body{height:100%} 撑满：body 自己钉满窗口；固定 header/footer + 中间滚动 */
+    body { position: fixed; inset: 0; display: flex; flex-direction: column; box-sizing: border-box; }
+    header { flex: none; padding: 12px 16px; font-weight: 600; border-bottom: 1px solid #232838; }
+    main { flex: 1 1 auto; overflow-y: auto; padding: 12px 16px; }  /* 滚动交给 CSS overflow */
+    footer { flex: none; display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid #232838; }
+    label { display: block; margin: 10px 0 4px; color: #9aa3b8; font-size: 12px; }
+    input, select { width: 100%; box-sizing: border-box; height: 36px; padding: 0 10px;
+                    border: 1px solid #2d3446; border-radius: 8px; background: #1a1e28; color: #e8eaf0; }
+    button { flex: 1; height: 40px; border: 0; border-radius: 8px; font-size: 15px; color: #fff; }
+    #start { background: #2f6fed; }
+    #cancel { background: #2a2f3a; }
+  </style>
+</head>
+<body>
+  <header>自动答题</header>
+  <main>
+    <label for="quizPath">题库文件路径</label>
+    <input id="quizPath" type="text">
+
+    <label for="speed">答题间隔（毫秒）</label>
+    <select id="speed">
+      <option value="500">快（500ms）</option>
+      <option value="1000">正常（1000ms）</option>
+      <option value="2000">慢（2000ms）</option>
+    </select>
+    <!-- 原生 select 直接写：宿主会自动升级成页面内下拉，不要再手写一套 -->
+  </main>
+  <footer>
+    <button id="cancel" type="button">取消</button>
+    <button id="start" type="button">开始</button>
+  </footer>
+
+  <script>
+    // window.wemod 在页面加载后注入；注入完成会派发 wemod:ready。先判一次，避免注入早于本脚本
+    function boot() {
+      var $ = function (id) { return document.getElementById(id); };
+
+      // 读变量：getVar(单个) / vars()（全量快照对象）
+      $('quizPath').value = wemod.getVar('题库文件路径') || '题库.txt';
+      $('speed').value = String(wemod.getVar('答题间隔') || 1000);
+
+      // 变量被别处改了（脚本 / 控制台 / 其它页面）时同步控件
+      wemod.onVarChange(function () {
+        $('quizPath').value = wemod.getVar('题库文件路径') || '';
+      });
+
+      // 运行前菜单：start(values) 把 values 写进变量后放行脚本
+      $('start').addEventListener('click', function () {
+        wemod.start({
+          '题库文件路径': $('quizPath').value,
+          '答题间隔': Number($('speed').value)
+        });
+      });
+      // 取消：脚本不启动
+      $('cancel').addEventListener('click', function () { wemod.cancel(); });
+    }
+    if (window.wemod) boot();
+    else window.addEventListener('wemod:ready', boot, { once: true });
+  </script>
+</body>
+</html>
+```
+
+> `start` 的 `values` 也可以省略——先 `wemod.setVar('题库文件路径', 值)` 再 `wemod.start()` 等价。`rerun(values?)` 用于**菜单保留态重跑**（`keepOnScriptEnd=true` 时脚本跑完菜单还在，可让用户改了参数再跑一次）。
+
+### 6.3 `window.wemod` 页面 API 全表
+
+`window.wemod` 在**页面加载后注入**；页面可以监听 `wemod:ready` 知道注入完成（先 `if (window.wemod)` 判一次更稳）。按用途分六组：
+
+| 分组 | 方法 | 说明 |
+|---|---|---|
+| 变量 | `getVar(name)` | 读单个变量 |
+| | `vars()` | 全量变量快照对象 |
+| | `setVar(name, value)` | 写变量 |
+| | `onVarChange(cb)` | 变量变化回调（回调里用 `getVar` 重新取值最稳） |
+| 运行 | `start(values?)` | **运行前菜单专用**：写变量并放行脚本 |
+| | `cancel()` | 取消：脚本不启动 |
+| | `rerun(values?)` | 菜单保留态重跑 |
+| | `pause()` / `resume()` / `runState()` | 暂停 / 恢复 / 查运行状态 |
+| 窗口 | `setSize(wDp, hDp)` | 运行中改窗口尺寸（dp） |
+| | `moveTo(x, y)` / `moveBy(dx, dy)` | 移动窗口 / 相对移动 |
+| | `snap(edge, visibleDp)` | 贴边（`edge` 如 `"left"`；`visibleDp` = 贴边后保留可见的尺寸） |
+| | `snapNearest()` | 就近贴边 |
+| | `minimize()` | 最小化 |
+| | `setBall(bool)` | 切换迷你球（收起态） |
+| | `setDraggable(bool)` | 设置可拖动 |
+| | `setResizable(bool)` | 设置可缩放 |
+| | `setAlpha(0..1)` | 窗口透明度 |
+| | `geometry()` | 当前窗口几何 → `{x, y, w, h}` |
+| | `screen()` | 屏幕/安全区信息 → 见 6.4（本轮新增） |
+| 事件 | `emit(name, data)` | **页面 → 脚本**；脚本用 `runtime.h5.wait(handle, name, ...)` 收 |
+| | `on(name, cb)` | **脚本 → 页面**；脚本用 `runtime.h5.emit(handle, name, data)` 推 |
+| 返回键 | `onBack(cb)` | **面板展开态才把返回交给页面**；不注册则返回 = 收起成迷你球；迷你球态不劫持返回 |
+| 其它 | `close()` | 关闭页面 |
+| | `log(msg)` | 页面日志（logcat 关键字 `WeMod/HOST`） |
+| | `toast(msg)` | 页面轻提示 |
+
+> `wemod.on(name, cb)` 拿到的 `data` 形态以宿主为准：写页面时用 `typeof data === 'string' ? JSON.parse(data) : data` 兜一下最稳（`wait` 返回的**确定**是 JSON 文本，见 6.6）。
+
+### 6.4 `wemod.screen()` 返回的字段
+
+判断横竖屏、避开系统栏、算初始尺寸都用它（`Px` 后缀 = 像素，`Dp` = dp）：
+
+| 字段 | 含义 |
+|---|---|
+| `widthPx` / `heightPx` | 屏幕宽 / 高（像素） |
+| `widthDp` / `heightDp` | 屏幕宽 / 高（dp） |
+| `density` | 屏幕密度 |
+| `densityDpi` | 屏幕 DPI |
+| `safeTopPx` / `safeBottomPx` | 顶部 / 底部安全区（像素） |
+| `availableWidthPx` / `availableHeightPx` | 可用宽 / 高（像素） |
+| `windowWidthPx` / `windowHeightPx` | 当前窗口宽 / 高（像素） |
+| `orientation` | `"portrait"` / `"landscape"` |
+
+```js
+// 横屏就换成横向布局的窗口尺寸；贴左边只留 28dp 可见
+var s = wemod.screen();
+if (s.orientation === 'landscape') {
+  wemod.setSize(520, 320);
+} else {
+  wemod.snap('left', 28);
+}
+// 需要避开状态栏时，用安全区像素 / density 换算成 dp 再参与布局
+var topDp = s.safeTopPx / s.density;
+```
+
+### 6.5 窗口尺寸优先级（写死，按这个顺序理解）
+
+1. **页面 `<meta name="wemod-size" content="宽x高">`**（如 `320x460`）：**最高优先级**。宿主**开窗前**解析 `runGate.path` 指向页面的该标签、**不执行页面**；页面写了就以它作初始尺寸，压过项目信息。
+2. **项目信息 `runGate.widthDp/heightDp`**：初始默认值（页面没写 meta 时生效）。
+3. **运行中页面 `wemod.setSize(wDp, hDp)`**：脚本跑起来后可随时改。
+4. **用户拖拽 / 缩放**：只影响**本次运行**，**不写回项目**。
+5. **屏幕 + 系统栏夹取兜底**：最终都会被夹到屏幕可用区内。
+
+补充两条：
+
+- **CSS 的 `width/height` 不改变窗口**：窗口尺寸只由上面 1~3 决定，CSS 只影响页面内部布局。
+- 第 4、5 步都是**本次运行内**的调整：用户拖完/缩放完不会回写项目，下次运行仍从 1~2 重新起步。
+
+### 6.6 脚本侧 `runtime.h5`（打开 / 推事件 / 等事件 / 关闭）
+
+| 方法 | 语义 |
+|---|---|
+| `open(path, widthDp = 300, heightDp = 420, title = "")` → 句柄字符串 | 打开页面。**打开失败返回空串 `''`，必须判断**。`title` 规则同 `runGate.title`（非空 = 宿主画可拖动标题栏，空 = 页面自己画） |
+| `close(handle)` | 关闭指定页面 |
+| `closeAll()` | 关闭全部 H5 页面 |
+| `wait(handle, event, timeoutMs = 10000)` → JSON 文本 / `null` | 等页面 `wemod.emit(event, data)`；返回**页面 payload 的 JSON 文本**。超时 / 页面关闭 / 停止脚本 → `null`。**同步阻塞**；脚本被停止会**立即返回** |
+| `emit(handle, event, data)` | 向页面推事件（页面 `wemod.on(event, cb)` 收）。**页面未就绪时排队**（上限 32 条，超了丢最旧），页面加载后**补投** |
+
+完整可复用写法（`run_code` 节点的 `code` 就是下面这段 JS；`language="javascript"`、`timeoutMs` 给够，要大于 `wait` 的超时）：
+
+```js
+// 打开运行期面板：open(项目内页面路径, 宽dp, 高dp, 标题)
+// title 为空 = 标题栏由页面自己画；非空 = 宿主画可拖动标题栏
+var handle = runtime.h5.open('ui/panel.html', 300, 420, '进度面板');
+if (!handle) {
+  // 打开失败返回空串 ''，必须判断；否则后面 wait/emit 全是无效操作
+  runtime.process.log('H5 面板打开失败：检查 path 大小写与文件是否存在');
+} else {
+  try {
+    // 脚本 → 页面：页面用 wemod.on('state', cb) 收；未就绪时排队（上限 32 条，丢最旧），加载后补投
+    runtime.h5.emit(handle, 'state', { step: 1, text: '准备中' });
+
+    // 页面 → 脚本：等页面 wemod.emit('userChoice', {...})
+    var raw = runtime.h5.wait(handle, 'userChoice', 10000);
+    if (raw === null) {
+      // null = 超时 / 页面被关闭 / 脚本被停止（wait 同步阻塞，停止脚本会立即返回）
+      runtime.process.log('10 秒内没有收到用户选择，走默认分支');
+    } else {
+      var payload = JSON.parse(raw);        // wait 返回的是 JSON 文本，要自己 parse
+      runtime.variables.set('用户选择', payload.choice);
+    }
+  } finally {
+    runtime.h5.close(handle);               // 收尾也可以 runtime.h5.closeAll()
+  }
+}
+```
+
+放进脚本 JSON 的形态：
+
+```json
+{ "type": "action",
+  "action": { "type": "run_code", "language": "javascript", "timeoutMs": 30000,
+    "code": "<把上面那段 JS 粘进来：JSON 里换行写成 \\n、双引号写成 \\\">" },
+  "comment": "打开运行期 H5 面板 → 推进度 → 等用户选择 → 写变量 → 关页面" }
+```
+
+### 6.7 运行期页面示例（事件面板 + 返回键）
+
+页面文件 `ui/panel.html`（脚本里 `runtime.h5.open('ui/panel.html', 300, 420, '')` 打开；`title` 为空时标题栏由本页自己画）：
+
+```html
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    html, body { margin: 0; background: #12141a; color: #e8eaf0;
+                 font: 14px/1.5 system-ui, sans-serif; }
+    /* 运行期页面同样不靠 html,body{height:100%}：body 钉满窗口再分三段 */
+    body { position: fixed; inset: 0; display: flex; flex-direction: column; box-sizing: border-box; }
+    /* 自己画标题栏：标题文本 + 收起按钮 */
+    header { flex: none; display: flex; align-items: center; gap: 8px;
+             padding: 10px 14px; font-weight: 600; border-bottom: 1px solid #232838; }
+    header .grow { flex: 1 1 auto; }
+    header button { border: 0; background: #2a2f3a; color: #c8cfdd; border-radius: 6px; padding: 4px 10px; }
+    main { flex: 1 1 auto; overflow-y: auto; padding: 12px 14px; }
+    footer { flex: none; display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid #232838; }
+    footer button { flex: 1; height: 38px; border: 0; border-radius: 8px; font-size: 15px; color: #fff; background: #2f6fed; }
+    footer button.secondary { background: #2a2f3a; }
+    #line { font-size: 15px; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="grow">进度面板</span>
+    <button id="mini" type="button">收起</button>
+  </header>
+  <main>
+    <div id="line">等待脚本推送…</div>
+  </main>
+  <footer>
+    <button id="close" class="secondary" type="button">关闭</button>
+    <button id="ok" type="button">知道了</button>
+  </footer>
+
+  <script>
+    function boot() {
+      var $ = function (id) { return document.getElementById(id); };
+
+      // 脚本 → 页面：脚本 runtime.h5.emit(handle, 'state', {...}) 推到这里
+      wemod.on('state', function (data) {
+        var d = (typeof data === 'string') ? JSON.parse(data) : data;
+        $('line').textContent = '第 ' + d.step + ' 步：' + d.text;
+      });
+
+      // 页面 → 脚本：emit 的名字就是脚本 runtime.h5.wait(handle, 'userChoice') 等的事件名
+      $('ok').addEventListener('click', function () { wemod.emit('userChoice', { choice: 'ok' }); });
+      $('close').addEventListener('click', function () { wemod.close(); });
+
+      // 返回键：只有面板展开态才交给页面；不注册 onBack ⇒ 返回=收起成迷你球。
+      // 迷你球态不劫持返回（不会把返回再交给页面）。
+      wemod.onBack(function () { $('mini').click(); });
+      $('mini').addEventListener('click', function () { wemod.setBall(true); });
+    }
+    if (window.wemod) boot();
+    else window.addEventListener('wemod:ready', boot, { once: true });
+  </script>
+</body>
+</html>
+```
+
+### 6.8 H5 常见坑（写页面/写脚本各一半）
+
+| 坑 | 现象 / 正确做法 |
+|---|---|
+| **`runtime.log` 不存在** | 脚本 JS 里没有 `runtime.log`：写它会抛 `TypeError: Cannot find default value for object`。脚本侧用 `console.log(...)` 或 `runtime.process.log(...)`；**页面侧**用 `wemod.log(...)` |
+| **原生 `<select>` 会被宿主自动升级** | 页面内直接写 `<select>` 就得到页面内下拉；**不要**再手写一套自定义下拉（会变成双份下拉） |
+| **首帧透明** | 页面首帧是透明的（避免白闪），所以别把关键 UI 放到很晚才渲染；背景色写在 `html/body` 上，关键内容进 DOM 时就有骨架 |
+| **别依赖 `html,body{height:100%}` 撑满** | 菜单类页面建议**固定 header/footer + 中间 `overflow-y:auto`**（见 6.2）；整页定位也可用 `position:fixed; inset:0` |
+| **标题栏谁画** | `runGate.title` / `open(..., title)` **非空 = 宿主画可拖动标题栏**；**空 = 页面自己画**（自己画时用 `setDraggable` 决定哪块能拖动） |
+| **页面内部滚动** | 用 CSS `overflow`（`overflow-y:auto` / `overflow:hidden`），不要指望窗口帮你滚 |
+| **调试看哪里** | logcat 关键字：`H5OverlayHost`（窗口几何 / 尺寸来源 / 贴边）、`H5RunGate`（菜单声明与解析）、`WeMod/HOST`（`runtime.h5` 调用与页面日志） |
+| **`open` 返回值 / `wait` 返回值** | `open` 失败返回**空串**，必须判断；`wait` 超时/页面关闭/停止脚本返回 **`null`**，必须判断后再 `JSON.parse` |
+
+### 6.9 H5 自查（交付前过一遍）
+
+- [ ] `runGate.path` 与项目内实际文件名**大小写完全一致**（如 `ui/menu.html`，不是 `ui/Menu.html`）。
+- [ ] 菜单页有 `wemod:ready` 兜底（`if (window.wemod) boot(); else addEventListener('wemod:ready', ...)`），不假设注入时机。
+- [ ] `runtime.h5.open` 的返回值判断了空串；`runtime.h5.wait` 的 `null` 分支已处理（超时/页面关闭/停止脚本）。
+- [ ] 窗口尺寸只靠 `<meta name="wemod-size">` / `runGate.widthDp/heightDp` / `wemod.setSize` 声明，没有用 CSS 宽高硬撑。
+- [ ] 页面里没有 `runtime.log`（脚本侧用 `console.log` / `runtime.process.log`，页面侧用 `wemod.log`）。
+- [ ] 首帧有底色（不白闪），固定 header/footer + 中间滚动（或 `position:fixed; inset:0`）。
+- [ ] 调过一遍 logcat（`H5OverlayHost` / `H5RunGate` / `WeMod/HOST`），确认窗口尺寸来源与事件名都对上。
+
+## 7. 常用设计模式
 
 1. **等节点再点**（最稳）：`wait_node`（写 matched 变量）→ `if` 变量条件 → `node_click` / 失败处理。超时软失败不中断，可配 `retryTimes=-1` 或失败策略 GOTO 重试标签。
 2. **固定次数重试循环**：`repeat`(times=N) + `wait_node` + `break`（找到就 break）+ `if` 检查；找不到走 else 分支。
@@ -790,7 +1133,7 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
     要点：`#` 先换成换行再用 `lines()` 拆 —— `lines()` 会**去掉空行**，所以"单选（只有一项）"和
     "答案列为空"都天然正确（空答案 ⇒ 零轮，不会去点空文字）；`intervalMillis` 给 500ms 防连点被吞。
 
-## 7. 交付自查清单（对 ScriptValidator 规则逐项）
+## 8. 交付自查清单（对 ScriptValidator 规则逐项）
 
 - [ ] 节点树完整闭合：每个 `if`/`repeat`/`while_*`/`try_catch`/`race`/`subflow_def`/`var_switch` 都有 block，`block.nodes` 存在（可空数组）。
 - [ ] `repeat.times > 0`（校验器强制）；`intervalMillis >= 0`。
@@ -808,19 +1151,20 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
       数据源为空 ⇒ 一轮不跑（不是报错）；数据源解析失败 ⇒ 软失败 `foreach_source_unresolved`。
 - [ ] **数据驱动优先用函数**：能在一次表达式里算完的（找命中行 / 取列 / 随机取未用 / 统计）用
       `findContains`/`findLike`/`splitPick`/`mapPick`/`pickExcluding`，不要用 `while_var`/`foreach` 手搓循环
-      （见 §6 第 10 条，附可直接复制的 JSON）。
+      （见 §7 第 10 条，附可直接复制的 JSON）。
 - [ ] **变量赋值时序**：所有 `*VarKey` 指向的变量必须在**执行到该动作之前**已赋值——未定义 / 值为空 / 表达式失败 ⇒ 动作**软失败**（不再用字面量兜底，见 §0）。跨分支使用的变量要在每个分支内都赋值，别指望"没准备好就走默认值"。
 - [ ] **多点比色/找色**（3.5.1）：`points[].tolerance` 不能为负；`N_OF` 的 N 不超过采样点数（比色用 `requiredMatchCount`、找色用 `pointsRequiredMatchCount`）；**多点找色必须 `color_region.matchMode="FIND_TARGETS"`**（否则 points 不生效）；`dxPct/dyPct` 是相对锚点的偏移（未设置用 `-2`，不要写 0 表示"没设"）。
 - [ ] 运行需求齐备：有节点查找 → 提示无障碍；有视觉 → 提示屏幕录制；纯坐标可提示 Shizuku/root 可选。
 - [ ] `event_listener` 的 `async=true` 时目标非 LABEL；监听器不要自环指向自身（校验器会查）。
 - [ ] `run_code` 的 JS 只调上表命名空间（`runtime.variables/touch/vision/nodes/system/screen/network/files/process/crypto/cookies` 与全局 `console`）；**命名不是 `vars`/`sys`/`node`/`net`/`file`**；`http_request`/`file_action`/AI 视觉等一次性授权动作注意运行时授权弹窗。
 - [ ] JS 数组可直接 `runtime.variables.set`（S1452 已自动转 List），JS 对象会转文本；子流程内 JS 写变量默认 LOCAL（返回回滚），跨子流程回传用 GLOBAL。
+- [ ] **H5（§6）**：`runGate.path` 与项目内文件名**大小写一致**；`runtime.h5.open` 返回值判了**空串**、`runtime.h5.wait` 的 **`null`**（超时/页面关闭/停止脚本）已处理；页面里没有 `runtime.log`；窗口尺寸只靠 `<meta name="wemod-size">` / `runGate.widthDp/heightDp` / `wemod.setSize` 声明，没有用 CSS 宽高硬撑；固定 header/footer + 中间滚动（见 §6.9 全表）。
 - [ ] 已知误报：运行时校验器的「表达式引用了未定义变量」不识别 `run_code` 动态 set 的变量、「变量重复定义」不识别循环内有意重置——均为警告不影响执行，可忽略。
 - [ ] 布尔变量只用 EQ/NE 比较；文本变量只用 EQ/NE；数字变量才能用 LT/GE 等。
 - [ ] JSON 合法：`"type"` 字段值必须与上表完全一致（含大小写与下划线）。
 - [ ] **字段类型与模型一致**（`.axs` 导入走严格模式，无 lenient/coerce）：`consoleVariables[].defaultValue` 是 **String**（数字要写 `"50"`）；`minValue/maxValue/stepValue` 是 Double；`valueType` 是字符串；`baseScreenWidth/Height` 是 Int。粘贴对话框(lenient)能容错不代表 `.axs` 导入能过。
 
-## 8. 明确不存在的写法（避免幻觉）
+## 9. 明确不存在的写法（避免幻觉）
 
 - ❌ `{{变量}}` / `${var}` 通用占位（只有 Prompt 的 `${...}` 模板）。
 - ❌ 三元 `a ? b : c`（用 `if(a,b,c)`）。
@@ -834,6 +1178,10 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 - ❌ 期望普通异常被 `try_catch` 捕获（只捕获 TryCatchAbortException 语义路径）。
 - ❌ 在 JS 里访问 Android 类（Rhino 无 JavaMembers 支持，会 NoClassDefFoundError——只能用 `runtime.*`）。
 - ❌ `open_app` 之外的任意包名启动方式（没有 intent 动作）。
+- ❌ **`runtime.log`**：脚本 JS 里没有这个函数（写它会抛 `TypeError: Cannot find default value for object`）。脚本侧用 `console.log` / `runtime.process.log`，H5 页面侧用 `wemod.log`（见 §6.3/§6.8）。
+- ❌ 用 **CSS `width/height` 改窗口尺寸**：窗口尺寸只认 §6.5 的五个来源（`<meta name="wemod-size">` → `runGate.widthDp/heightDp` → `wemod.setSize` → 用户拖拽/缩放 → 屏幕夹取）。
+- ❌ 给原生 `<select>` **再手写一套自定义下拉**：宿主会自动把 `<select>` 升级成页面内下拉，重造会出双份（见 §6.8）。
+- ❌ 依赖 `html,body{height:100%}` 让 H5 页面撑满：菜单类页面用**固定 header/footer + 中间 `overflow-y:auto`**，或 `position:fixed; inset:0`（见 §6.2/§6.8）。
 
 ## 附 A：字段增量速查（近期能力模型新增，早期文档未覆盖）
 
@@ -871,7 +1219,7 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 
 ## 附：快速索引（仅源码持有者可选，用于复核/校准）
 
-> 使用者不需要读源码——本文档 §3~§5 已内嵌全部字段与语义。以下路径仅本项目（WeMod 主仓）维护者在版本升级后复核时参考。
+> 使用者不需要读源码——本文档 §3~§6 已内嵌全部字段与语义。以下路径仅本项目（WeMod 主仓）维护者在版本升级后复核时参考。
 
 | 主题 | 文件 |
 |---|---|

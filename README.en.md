@@ -21,14 +21,14 @@ Field names and enum values were verified one by one against the source. Traps o
 ## Three ways to use it
 
 1. **As an AI skill (recommended)** — drop the whole directory into your skills folder (for Reasonix: `.reasonix/skills/wemod-script-author/`), then ask your assistant to "use wemod-script-author to write …";
-2. **As a manual** — read `SKILL.md` directly (§0 boundaries, §3 action table, §4 variables, §7 self-check list) and write scripts by hand;
+2. **As a manual** — read `SKILL.md` directly (§0 boundaries, §3 action table, §4 variables, §6 H5, §8 self-check list) and write scripts by hand;
 3. **Validator only** — `node tools/validate-script.mjs your-script.axs` for an offline pre-check.
 
 ## Repository layout
 
 ```
 wemod-script-author/
-├── SKILL.md                    # main skill: five-step delivery flow + full model manual + self-check list (self-contained)
+├── SKILL.md                    # main skill: five-step delivery flow + full model manual + self-check list (self-contained; §6 covers H5: runGate / window.wemod / runtime.h5)
 ├── examples/                   # importable, complete samples (each one must pass the validator below)
 │   ├── auto-douyin-skin-001.axs       # like/save by skin-tone check: vision condition + jumpTargetOnFail
 │   ├── auto-quiz-answer-001.axs       # auto quiz answering: subflow_def reuse
@@ -88,6 +88,20 @@ node tools/validate-script.mjs your-script.axs
 #      ⇒ warning + literal fallback. Condition-class fields (vision condition variables, condition-group retries)
 #      never break the flow, but they do log.
 #      ⇒ Assign variables BEFORE the action that consumes them; don't rely on "fall back to a default if unset".
+
+# 6) Writing an H5 pre-run menu / runtime panel?
+#    Menu  = project-level project.json → runGate (kind currently h5 only; path is a project-relative path and
+#            case-sensitive; widthDp/heightDp initial size; title non-empty = host draws a draggable title bar,
+#            empty = the page draws it; snapAfterStart e.g. "left:28"; keepOnScriptEnd keeps it until the console closes).
+#            It is mutually exclusive with the .ui.json parameter page — H5 wins. Page API is window.wemod:
+#            start(values)/cancel()/rerun(values), getVar/vars/setVar/onVarChange, window methods, emit/on,
+#            onBack, close/log/toast.
+#    Panel = inside the script's run_code: runtime.h5.open(path, widthDp=300, heightDp=420, title) — returns an
+#            empty string '' on failure (must check); emit pushes to the page (queued up to 32, oldest dropped,
+#            flushed after load); wait receives page events (returns the page payload as JSON text; null on
+#            timeout / page closed / script stopped — must check); close/closeAll to finish.
+#    Copy-ready code: SKILL.md §6.2 (menu page HTML), §6.6 (open/emit/wait/close), §6.7 (event panel HTML).
+#    Built-in sample projects: sample_project_h5_gate (pre-run menu), sample_project_h5_events (runtime event panel).
 ```
 
 ## Exit codes of the validator (for scripting / CI)
@@ -98,9 +112,17 @@ node tools/validate-script.mjs your-script.axs
 | `1` | validation errors (JSON syntax, required fields, enums, references, types) |
 | `2` | wrong usage (missing file argument) |
 
+## H5 cheat sheet (details in `SKILL.md` §6)
+
+- **Two surfaces**: the pre-run menu (project-level `project.json → runGate`) and runtime pages (script-side `runtime.h5.*`). Both use the same page API `window.wemod` (injected after page load; you can listen for `wemod:ready`).
+- **Window-size priority**: `<meta name="wemod-size" content="WxH">` → `runGate.widthDp/heightDp` → `wemod.setSize` at runtime → user drag/resize (not persisted to the project) → screen + system-bar clamping. **CSS width/height never changes the window.**
+- **`wemod.screen()`** fields: `widthPx/heightPx`, `widthDp/heightDp`, `density`, `densityDpi`, `safeTopPx`, `safeBottomPx`, `availableWidthPx`, `availableHeightPx`, `windowWidthPx`, `windowHeightPx`, `orientation` (`portrait` / `landscape`).
+- **Traps**: `runtime.log` does not exist (use `console.log` / `runtime.process.log`, and `wemod.log` in pages — otherwise Rhino throws `TypeError: Cannot find default value for object`); a native `<select>` is auto-upgraded to an in-page dropdown (write plain `select`, do not hand-roll another one); the first frame is transparent (avoids white flash — do not render key UI late); do not rely on `html,body{height:100%}` (fixed header/footer + scrolling middle section, or `position:fixed; inset:0`); who draws the title bar depends on whether `title` is non-empty; debug in logcat with `H5OverlayHost` / `H5RunGate` / `WeMod/HOST`.
+
 ## Version and model baseline
 
 - Data baseline: model snapshot **2026-09-28** (includes Shell command, key injection, screenshot save target and more; calibration notes are at the top of `SKILL.md`).
+- **2026-11-04 — H5 chapter added (`SKILL.md` §6, docs only)**: pre-run menu `runGate`, page API `window.wemod`, `wemod.screen()`, window-size priority, script-side `runtime.h5`, H5 traps and a self-check list. The action model and the validator are **unchanged** (the validator does not inspect HTML/JS). Built-in sample projects: `sample_project_h5_gate` / `sample_project_h5_events` (App → Help center → Sample center).
 - If the app on your phone is a different version: **import one of the samples first as a smoke test**; when in doubt, **the model inside the app wins**.
 - Maintainer flow: after editing `SKILL.md`, run `node tools/validate-script.mjs examples/*.axs` (one file at a time) and make sure everything is green before committing. CI does the same on every push.
 

@@ -21,14 +21,14 @@
 ## 三种用法
 
 1. **作为 AI 技能（推荐）**：把整个目录放进你的技能目录（Reasonix 为 `.reasonix/skills/wemod-script-author/`），然后对助手说"用 wemod-script-author 写一个……"；
-2. **作为手册**：直接读 `SKILL.md`（§0 边界 / §3 动作表 / §4 变量 / §7 自查清单），人工编写脚本；
+2. **作为手册**：直接读 `SKILL.md`（§0 边界 / §3 动作表 / §4 变量 / §6 H5 / §8 自查清单），人工编写脚本；
 3. **只用校验器**：`node tools/validate-script.mjs 你的脚本.axs` 做离线预检。
 
 ## 目录结构
 
 ```
 wemod-script-author/
-├── SKILL.md                    # 主技能：五步交付流程 + 完整模型手册 + 自查清单（自包含）
+├── SKILL.md                    # 主技能：五步交付流程 + 完整模型手册 + 自查清单（自包含；§6 为 H5：runGate / window.wemod / runtime.h5）
 ├── examples/                   # 可导入的完整样例（每个都必须能用下面的校验器跑通）
 │   ├── auto-douyin-skin-001.axs       # 肤色判定点赞收藏：视觉条件 + jumpTargetOnFail
 │   ├── auto-quiz-answer-001.axs       # 自动答题：subflow_def 子流程复用
@@ -78,11 +78,31 @@ node tools/validate-script.mjs 你的脚本.axs
 #      运行日志写明「字段名 + 变量名 + 原因」）；唯一例外：值类型不可转（如文本当坐标）→ 警告后回落。
 #      条件类（视觉条件的颜色/文字/模板/区域变量、条件组重试）不中断流程，但同样写日志。
 #      ⇒ 请在动作执行之前给变量赋值，不要依赖「没准备好就用默认值」的旧行为。
+
+# 6) 写 H5 运行前菜单 / 运行期面板？
+#    菜单 = 项目级 project.json → runGate（kind 目前只有 h5、path 项目内相对路径且区分大小写、
+#           widthDp/heightDp 初始尺寸、title 非空=宿主画可拖动标题栏 / 空=页面自己画、
+#           snapAfterStart 如 "left:28"、keepOnScriptEnd=true 保留到关控制台）；与 .ui.json 参数页互斥，H5 优先。
+#           页面侧 API 是 window.wemod：start(values)/cancel()/rerun(values)、getVar/vars/setVar/onVarChange、
+#           窗口方法、emit/on、onBack、close/log/toast。
+#    面板 = 脚本 run_code 里 runtime.h5.open(path, 宽dp=300, 高dp=420, 标题)：失败返回空串 ''（必须判断）、
+#           emit 推事件（页面未就绪排队 32 条、丢最旧，加载后补投）、wait 收事件（返回页面 payload 的 JSON 文本；
+#           超时 / 页面关闭 / 停止脚本返回 null，必须判断）、close/closeAll 收尾。
+#    可直接照抄 SKILL.md §6.2（菜单页完整 HTML）/ §6.6（open/emit/wait/close 完整代码）/ §6.7（事件面板 HTML）；
+#    内置示例项目：sample_project_h5_gate（运行前菜单）、sample_project_h5_events（运行期事件面板）。
 ```
+
+## H5 速记（详见 `SKILL.md` §6）
+
+- **两个面**：运行前菜单（项目级 `project.json → runGate`）与运行期页面（脚本 `runtime.h5.*`）；页面侧 API 同一个 `window.wemod`（页面加载后注入，可监听 `wemod:ready`）。
+- **窗口尺寸优先级**：`<meta name="wemod-size" content="宽x高">` → `runGate.widthDp/heightDp` → 运行中 `wemod.setSize` → 用户拖拽/缩放（不写回项目）→ 屏幕+系统栏夹取；**CSS 宽高改不了窗口**。
+- **`wemod.screen()`** 字段：`widthPx/heightPx`、`widthDp/heightDp`、`density`、`densityDpi`、`safeTopPx`、`safeBottomPx`、`availableWidthPx`、`availableHeightPx`、`windowWidthPx`、`windowHeightPx`、`orientation`（`portrait` / `landscape`）。
+- **坑**：`runtime.log` 不存在（用 `console.log` / `runtime.process.log`，页面用 `wemod.log`，否则 Rhino 报 `TypeError: Cannot find default value for object`）；原生 `<select>` 会被宿主自动升级为页面内下拉（直接写 select，别再造一套）；首帧透明（防白闪，关键 UI 别太晚渲染）；别依赖 `html,body{height:100%}` 撑满（固定 header/footer + 中间 `overflow-y:auto`，或 `position:fixed; inset:0`）；标题栏归谁画看 `title` 是否为空；调试看 logcat `H5OverlayHost` / `H5RunGate` / `WeMod/HOST`。
 
 ## 版本与模型基准
 
 - 数据基准：模型快照 **2026-09-28**（含 Shell 命令、按键注入、截屏保存位置等本轮新增；校准内容见 `SKILL.md` 顶部说明）。
+- **2026-11-04：补 H5 章节（`SKILL.md` §6，只改文档）** —— 运行前菜单 `runGate`、页面 API `window.wemod`、`wemod.screen()`、窗口尺寸优先级、脚本侧 `runtime.h5`、H5 常见坑与自查。动作模型与校验器**无变更**（校验器不校验 HTML/JS 内容）。内置示例项目：`sample_project_h5_gate` / `sample_project_h5_events`（App 帮助中心 → 示例中心）。
 - 若你手机上的 App 版本与技能包版本不一致：**先导入一个样例脚本实测**；不一致时**以 App 内的模型为准**。
 - 维护者流程：改完 `SKILL.md` 后跑一遍 `node tools/validate-script.mjs examples/*.axs`，全绿再提交。
 
