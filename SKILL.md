@@ -741,6 +741,14 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 
 ## 6. H5 页面与运行前菜单（runGate / window.wemod / runtime.h5）
 
+> 技能包内附 3 个可直接导入的 H5 项目包（`examples/*.axsp`，用 `node tools/validate-axsp.mjs` 校验）：
+> - `h5-gate-menu-001.axsp` —— 最小可跑的运行前菜单（runGate + ui/menu.html：读手机尺寸换算、条件字段、参数写变量）；
+> - `h5-events-panel-001.axsp` —— 运行期事件面板（open → emit → on/wait → close，双向事件）；
+> - `elevator-inspection-fill-h5-001.axsp` —— 电梯定检填表（实填·H5 菜单版）：完整业务项目，菜单参数 → 脚本变量 → 填表流程。
+>
+> 另有 App 示例中心的内置示例项目 `sample_project_h5_gate` / `sample_project_h5_events`。
+
+
 > 本节是**唯一需要写 HTML** 的地方。脚本作者能看到的 H5 面只有**两个**，两面的页面侧 API 是同一个 `window.wemod`，区别在「声明在哪」与「有哪些入口」：
 
 | 面 | 何时出现 | 声明在哪 | 页面侧关键入口 |

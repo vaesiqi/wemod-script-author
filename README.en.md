@@ -39,9 +39,13 @@ wemod-script-author/
 │   ├── data-quiz-foreach-001.axs      # data-driven + foreach loop: read a quiz file by lines (file_action parseMode=LINES) → iterate rows → tap the answer on match, then break
 │   ├── data-quiz-multi-001.axs        # multi-answer quiz: answer column split by "#" → lines(replace(...)) → foreach taps each option (single answer / empty answer both work)
 │   ├── color-multi-point-001.axs      # multi-point color: color_at.points and color_region (FIND_TARGETS + points + findDirection) → hit point into a variable, then tap it
-│   └── window-trigger-001.axs         # window trigger: run when the target window appears
+│   ├── window-trigger-001.axs         # window trigger: run when the target window appears
+│   ├── h5-gate-menu-001.axsp           # H5 run-gate menu (project package): runGate → ui/menu.html, screen-size math, conditional fields, params into variables
+│   ├── h5-events-panel-001.axsp        # H5 runtime event panel (project package): runtime.h5.open → emit → page on/emit → wait → close
+│   └── elevator-inspection-fill-h5-001.axsp  # elevator inspection form filling (H5 menu edition, project package): full business project
 ├── tools/
-│   └── validate-script.mjs     # offline validator (runs on node; no Android / source needed)
+│   ├── validate-script.mjs     # offline validator (runs on node; no Android / source needed)
+│   └── validate-axsp.mjs       # .axsp project-package validator (project.json / runGate.path / main.axs, reuses validate-script)
 └── .github/workflows/
     └── validate-examples.yml   # CI: keeps every sample green, and smoke-tests the validator's failure path
 ```
@@ -54,6 +58,9 @@ node tools/validate-script.mjs examples/auto-douyin-skin-001.axs
 
 # 2) validate your own script
 node tools/validate-script.mjs your-script.axs
+
+# 2b) validate H5 project packages (.axsp with runGate + ui/*.html)
+node tools/validate-axsp.mjs
 #    checks: JSON syntax / required fields / enum values / reference integrity / consoleVariables types / author attribution
 
 # 3) ship it to the phone
@@ -124,7 +131,7 @@ node tools/validate-script.mjs your-script.axs
 - Data baseline: model snapshot **2026-09-28** (includes Shell command, key injection, screenshot save target and more; calibration notes are at the top of `SKILL.md`).
 - **2026-11-04 — H5 chapter added (`SKILL.md` §6, docs only)**: pre-run menu `runGate`, page API `window.wemod`, `wemod.screen()`, window-size priority, script-side `runtime.h5`, H5 traps and a self-check list. The action model and the validator are **unchanged** (the validator does not inspect HTML/JS). Built-in sample projects: `sample_project_h5_gate` / `sample_project_h5_events` (App → Help center → Sample center).
 - If the app on your phone is a different version: **import one of the samples first as a smoke test**; when in doubt, **the model inside the app wins**.
-- Maintainer flow: after editing `SKILL.md`, run `node tools/validate-script.mjs examples/*.axs` (one file at a time) and make sure everything is green before committing. CI does the same on every push.
+- Maintainer flow: after editing `SKILL.md`, run `node tools/validate-script.mjs examples/*.axs` (one file at a time) and `node tools/validate-axsp.mjs`, and make sure everything is green before committing. CI does the same on every push.
 
 ## Maintainers: sync from the project
 

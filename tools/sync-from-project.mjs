@@ -6,7 +6,8 @@
  * 抢票 / 抢单三个样例。项目侧改了 SKILL.md 或校验器后，在本仓库执行本脚本即可对齐，
  * 避免两份内容长期漂移（"新增动作忘了更新技能"那类问题的温床）。
  *
- * 会覆盖：SKILL.md、tools/validate-script.mjs，并镜像 examples/*.axs（排除抢购类样例）。
+ * 会覆盖：SKILL.md、tools/validate-script.mjs、tools/validate-axsp.mjs，
+ * 并镜像 examples/*.axs（排除抢购类样例）与 examples/*.axsp（H5 项目包，二进制原样复制）。
  * 不会碰：README*、LICENSE、.gitignore、.github/（这些是本仓库专属）。
  *
  * 用法：
@@ -72,7 +73,11 @@ console.log(`模式   : ${dryRun ? 'DRY-RUN（不写文件）' : '实际写入'}
 console.log('');
 
 // 1) 源目录基本校验
-for (const rel of ['SKILL.md', path.join('tools', 'validate-script.mjs')]) {
+for (const rel of [
+  'SKILL.md',
+  path.join('tools', 'validate-script.mjs'),
+  path.join('tools', 'validate-axsp.mjs'),
+]) {
   if (!fs.existsSync(path.join(projectSkill, rel))) fail(`源目录缺少 ${rel}：${projectSkill}`);
 }
 
@@ -82,6 +87,11 @@ copyIfChanged(
   path.join(projectSkill, 'tools', 'validate-script.mjs'),
   path.join(HERE, 'tools', 'validate-script.mjs'),
   'tools/validate-script.mjs',
+);
+copyIfChanged(
+  path.join(projectSkill, 'tools', 'validate-axsp.mjs'),
+  path.join(HERE, 'tools', 'validate-axsp.mjs'),
+  'tools/validate-axsp.mjs',
 );
 
 // 3) 镜像 examples（排除抢购类；开源侧多余文件只提示不删除）
@@ -97,8 +107,25 @@ for (const f of wanted) {
 }
 for (const f of skipped) notes.push(`- examples/${f}（按发布口径排除）`);
 
+// H5 项目包（.axsp 是 zip，必须按二进制复制，不能走 utf8 读写）
+const axspFiles = fs.readdirSync(srcExamples).filter((f) => f.endsWith('.axsp'));
+for (const f of axspFiles) {
+  const src = path.join(srcExamples, f);
+  const dst = path.join(dstExamples, f);
+  const same = fs.existsSync(dst) && Buffer.compare(fs.readFileSync(src), fs.readFileSync(dst)) === 0;
+  if (same) {
+    notes.push(`= examples/${f}（无变化）`);
+    continue;
+  }
+  if (!dryRun) fs.copyFileSync(src, dst);
+  changes.push(`${fs.existsSync(dst) ? '~' : '+'} examples/${f}`);
+}
+
 if (fs.existsSync(dstExamples)) {
-  const extra = fs.readdirSync(dstExamples).filter((f) => f.endsWith('.axs') && !wanted.includes(f) && !EXCLUDE.has(f));
+  const allWanted = new Set([...wanted, ...axspFiles]);
+  const extra = fs
+    .readdirSync(dstExamples)
+    .filter((f) => (f.endsWith('.axs') || f.endsWith('.axsp')) && !allWanted.has(f) && !EXCLUDE.has(f));
   for (const f of extra) notes.push(`! examples/${f} 在源侧已不存在（未自动删除，请人工确认）`);
 }
 
@@ -131,7 +158,22 @@ if (!dryRun) {
     }
   }
   if (bad > 0) fail(`${bad} 个样例未通过校验`);
-  notes.push(`✓ ${exampleFiles.length} 个样例全部通过校验`);
+  notes.push(`✓ ${exampleFiles.length} 个脚本样例全部通过校验`);
+
+  // H5 项目包（.axsp）：校验 project.json / runGate.path / main.axs
+  const axspToCheck = fs.readdirSync(dstExamples).filter((f) => f.endsWith('.axsp')).sort();
+  if (axspToCheck.length > 0) {
+    try {
+      execFileSync(
+        process.execPath,
+        [path.join(HERE, 'tools', 'validate-axsp.mjs'), ...axspToCheck.map((f) => path.join(dstExamples, f))],
+        { stdio: 'pipe' },
+      );
+      notes.push(`✓ ${axspToCheck.length} 个 H5 项目包通过校验`);
+    } catch (e) {
+      fail(`H5 项目包校验失败：\n${String(e.stdout || e.stderr || e.message).trim()}`);
+    }
+  }
 }
 
 console.log('');

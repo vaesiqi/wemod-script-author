@@ -48,6 +48,19 @@ jobs:
           fi
           exit $fail
 
+      - name: 校验 H5 项目包（.axsp）
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(examples/*.axsp)
+          count=${#files[@]}
+          echo "发现 $count 个 H5 项目包"
+          if [ "$count" -lt 3 ]; then
+            echo "::error::examples 下 .axsp 少于 3 个（疑似被误删），当前 $count 个"
+            exit 1
+          fi
+          node tools/validate-axsp.mjs
+
       - name: 冒烟测试「校验器对坏脚本必须失败」
         shell: bash
         run: |

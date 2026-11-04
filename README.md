@@ -39,9 +39,13 @@ wemod-script-author/
 │   ├── data-quiz-foreach-001.axs      # 数据驱动 + 遍历循环：file_action(parseMode=LINES) 按行读题库 → foreach 逐题取题干/答案 → 命中点答案并 break
 │   ├── data-quiz-multi-001.axs        # 多选题：答案列 # 分隔 → lines(replace(...)) 拆成选项数组 → foreach 逐个点选（单选/空答案天然正确）
 │   ├── color-multi-point-001.axs      # 多点比色 / 多点找色：color_at.points 与 color_region（FIND_TARGETS + points + findDirection）→ 命中点写变量再点击
-│   └── window-trigger-001.axs         # 窗口触发：指定窗口出现时执行
+│   ├── window-trigger-001.axs         # 窗口触发：指定窗口出现时执行
+│   ├── h5-gate-menu-001.axsp           # H5 运行前菜单（项目包）：runGate → ui/menu.html，读手机尺寸换算、条件字段显隐、参数写变量
+│   ├── h5-events-panel-001.axsp        # H5 运行期事件面板（项目包）：runtime.h5.open → emit → 页面 on/emit → wait → close
+│   └── elevator-inspection-fill-h5-001.axsp  # 电梯定检填表（实填·H5 菜单版，项目包）：完整业务项目
 └── tools/
-    └── validate-script.mjs      # 离线校验器（node 运行，不依赖 Android / 源码）
+    ├── validate-script.mjs      # 离线校验器（node 运行，不依赖 Android / 源码）
+    └── validate-axsp.mjs        # .axsp 项目包校验器（zip 内 project.json / runGate.path / main.axs，复用 validate-script）
 ```
 
 ## 快速开始
@@ -52,6 +56,9 @@ node tools/validate-script.mjs examples/auto-douyin-skin-001.axs
 
 # 2) 校验你自己的脚本
 node tools/validate-script.mjs 你的脚本.axs
+
+# 2b) 校验 H5 项目包（.axsp，含 runGate 与 ui/*.html）
+node tools/validate-axsp.mjs
 #    检查项：JSON 语法 / 必填字段 / 枚举值 / 引用完整性 / consoleVariables 类型 / 作者归属
 
 # 3) 上手机
@@ -104,7 +111,7 @@ node tools/validate-script.mjs 你的脚本.axs
 - 数据基准：模型快照 **2026-09-28**（含 Shell 命令、按键注入、截屏保存位置等本轮新增；校准内容见 `SKILL.md` 顶部说明）。
 - **2026-11-04：补 H5 章节（`SKILL.md` §6，只改文档）** —— 运行前菜单 `runGate`、页面 API `window.wemod`、`wemod.screen()`、窗口尺寸优先级、脚本侧 `runtime.h5`、H5 常见坑与自查。动作模型与校验器**无变更**（校验器不校验 HTML/JS 内容）。内置示例项目：`sample_project_h5_gate` / `sample_project_h5_events`（App 帮助中心 → 示例中心）。
 - 若你手机上的 App 版本与技能包版本不一致：**先导入一个样例脚本实测**；不一致时**以 App 内的模型为准**。
-- 维护者流程：改完 `SKILL.md` 后跑一遍 `node tools/validate-script.mjs examples/*.axs`，全绿再提交。
+- 维护者流程：改完 `SKILL.md` 后跑一遍 `node tools/validate-script.mjs examples/*.axs` 与 `node tools/validate-axsp.mjs`，全绿再提交。
 
 ## 维护者：从项目同步
 
