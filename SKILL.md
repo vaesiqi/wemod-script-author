@@ -782,7 +782,7 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 | `kind` | 目前只有 `"h5"` | 菜单类型；写 `h5` 才走 H5 菜单 |
 | `path` | 项目内相对路径，**区分大小写**（如 `ui/menu.html`） | 菜单页面文件 |
 | `widthDp` / `heightDp` | 数字（dp） | 初始窗口尺寸（dp） |
-| `title` | 字符串 | **非空 = 宿主画可拖动标题栏**；**空串 = 标题栏由页面自己画** |
+| `title` | 字符串 | **非空 = 宿主画可拖动标题栏（标题 + 最小化 + 关闭）**；**空串 = 标题栏由页面自己画**，宿主会在右上角浮一个半透明关闭按钮兜底（页面最好自己画取消，样式更统一） |
 | `snapAfterStart` | 字符串，如 `"left:28"` | 菜单出现后自动贴边 |
 | `keepOnScriptEnd` | 布尔 | `true` = 脚本结束后菜单保留，直到用户关闭控制台 |
 
@@ -1082,7 +1082,7 @@ if (!handle) {
 | **原生 `<select>` 会被宿主自动升级** | 页面内直接写 `<select>` 就得到页面内下拉；**不要**再手写一套自定义下拉（会变成双份下拉） |
 | **首帧透明** | 页面首帧是透明的（避免白闪），所以别把关键 UI 放到很晚才渲染；背景色写在 `html/body` 上，关键内容进 DOM 时就有骨架 |
 | **别依赖 `html,body{height:100%}` 撑满** | 菜单类页面建议**固定 header/footer + 中间 `overflow-y:auto`**（见 6.2）；整页定位也可用 `position:fixed; inset:0` |
-| **标题栏谁画** | `runGate.title` / `open(..., title)` **非空 = 宿主画可拖动标题栏**；**空 = 页面自己画**（自己画时用 `setDraggable` 决定哪块能拖动） |
+| **标题栏谁画** | `runGate.title` / `open(..., title)` **非空 = 宿主画可拖动标题栏**（右侧固定「最小化 / 关闭」）；**空 = 页面自己画**（自己画时用 `setDraggable` 决定哪块能拖动；宿主仍提供右上角兜底关闭） |
 | **页面内部滚动** | 用 CSS `overflow`（`overflow-y:auto` / `overflow:hidden`），不要指望窗口帮你滚 |
 | **调试看哪里** | logcat 关键字：`H5OverlayHost`（窗口几何 / 尺寸来源 / 贴边）、`H5RunGate`（菜单声明与解析）、`WeMod/HOST`（`runtime.h5` 调用与页面日志） |
 | **`open` 返回值 / `wait` 返回值** | `open` 失败返回**空串**，必须判断；`wait` 超时/页面关闭/停止脚本返回 **`null`**，必须判断后再 `JSON.parse` |
