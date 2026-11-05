@@ -1248,3 +1248,7 @@ if (!handle) {
 | 校验规则 | `core/execution/validator/ScriptValidatorNodeTraversal.kt`、`ScriptValidatorConditionChecks.kt` |
 | 运行需求 | `core/execution/ScriptRunRequirements.kt` |
 | 历史设计依据 | `docs/方案/S1412_方案_变量局部全局作用域语义落地.md`、`docs/分析/S1402_分析_等待节点动作结果写入变量能力对齐.md` |
+
+**宿主保留事件（S-H5-20）**：脚本开始/结束会推给页面——`wemod.on('runStarted', cb)`、`wemod.on('runEnded', cb)`；
+页面里提交按钮切"运行中"、结束后恢复"再次运行"就用这一对，不要自己轮询 `runState()`（会更稳、也省电）。这两个事件名不要自定义占用。
+
