@@ -42,7 +42,11 @@ wemod-script-author/
 │   ├── window-trigger-001.axs         # 窗口触发：指定窗口出现时执行
 │   ├── h5-gate-menu-001.axsp           # H5 运行前菜单（项目包）：runGate → ui/menu.html，读手机尺寸换算、条件字段显隐、参数写变量
 │   ├── h5-events-panel-001.axsp        # H5 运行期事件面板（项目包）：runtime.h5.open → emit → 页面 on/emit → wait → close
-│   └── elevator-inspection-fill-h5-001.axsp  # 电梯定检填表（实填·H5 菜单版，项目包）：完整业务项目
+│   ├── elevator-inspection-fill-h5-001.axsp  # 电梯定检填表（实填·H5 菜单版，项目包）：完整业务项目
+│   ├── h5-wizard-001.axsp              # 多步骤向导（项目包）：3 步表单（基本参数 → 选项 → 汇总确认）+ 步骤条，第 3 步 wemod.start(values)
+│   ├── h5-form-confirm-001.axsp        # 表单校验 + 二次确认（项目包）：必填/非法值内联红字 + 页面内确认层，确认后才 start
+│   ├── h5-multi-select-001.axsp        # 列表多选写数组变量（项目包）：8 项复选 + 全选/反选 + 已选计数 → 选中项: ["A","B"] → 脚本遍历数组
+│   └── h5-progress-panel-001.axsp      # 运行期进度面板（项目包）：无 runGate，脚本 open → 3 段 emit(progress) → wait(done) → close
 └── tools/
     ├── validate-script.mjs      # 离线校验器（node 运行，不依赖 Android / 源码）
     └── validate-axsp.mjs        # .axsp 项目包校验器（zip 内 project.json / runGate.path / main.axs，复用 validate-script）

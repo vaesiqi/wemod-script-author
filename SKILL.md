@@ -741,12 +741,16 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 
 ## 6. H5 页面与运行前菜单（runGate / window.wemod / runtime.h5）
 
-> 技能包内附 3 个可直接导入的 H5 项目包（`examples/*.axsp`，用 `node tools/validate-axsp.mjs` 校验）：
+> 技能包内附 7 个可直接导入的 H5 项目包（`examples/*.axsp`，用 `node tools/validate-axsp.mjs` 校验）：
 > - `h5-gate-menu-001.axsp` —— 最小可跑的运行前菜单（runGate + ui/menu.html：读手机尺寸换算、条件字段、参数写变量）；
 > - `h5-events-panel-001.axsp` —— 运行期事件面板（open → emit → on/wait → close，双向事件）；
-> - `elevator-inspection-fill-h5-001.axsp` —— 电梯定检填表（实填·H5 菜单版）：完整业务项目，菜单参数 → 脚本变量 → 填表流程。
+> - `elevator-inspection-fill-h5-001.axsp` —— 电梯定检填表（实填·H5 菜单版）：完整业务项目，菜单参数 → 脚本变量 → 填表流程；
+> - `h5-wizard-001.axsp` —— 多步骤向导：3 步表单（基本参数 → 选项 → 汇总确认）+ 顶部步骤条 + 上一步/下一步，第 3 步才 `wemod.start(values)`；
+> - `h5-form-confirm-001.axsp` —— 表单校验 + 二次确认：必填/非法值内联红字，点提交先弹页面内确认层（返回修改/确认执行），确认后才 `start`；
+> - `h5-multi-select-001.axsp` —— 列表多选写数组变量：8 项复选 + 全选/反选 + 已选计数，提交 `选中项: ["A","B"]`，脚本遍历数组逐项打日志；
+> - `h5-progress-panel-001.axsp` —— 运行期进度面板（无 runGate）：脚本 `open` → 3 段 `emit(h,'progress',{percent,text,step})` → 页面进度条/日志/完成-取消 → `wait(h,'done',15000)` → `close`。
 >
-> 另有 App 示例中心的内置示例项目 `sample_project_h5_gate` / `sample_project_h5_events`。
+> 另有 App 示例中心的内置示例项目 `sample_project_h5_gate` / `sample_project_h5_events` / `sample_project_h5_wizard` / `sample_project_h5_form_confirm` / `sample_project_h5_multi_select` / `sample_project_h5_progress_panel`（与上面 6 个 H5 项目包一一对应，可一键创建项目）。
 
 
 > 本节是**唯一需要写 HTML** 的地方。脚本作者能看到的 H5 面只有**两个**，两面的页面侧 API 是同一个 `window.wemod`，区别在「声明在哪」与「有哪些入口」：
@@ -761,7 +765,11 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 内置示例项目（帮助中心 → 示例中心可直接打开对照）：
 
 - `sample_project_h5_gate` —— 运行前菜单；
-- `sample_project_h5_events` —— 运行期事件面板。
+- `sample_project_h5_events` —— 运行期事件面板；
+- `sample_project_h5_wizard` —— 多步骤向导（3 步 + 汇总确认）；
+- `sample_project_h5_form_confirm` —— 表单校验 + 二次确认；
+- `sample_project_h5_multi_select` —— 列表多选写数组变量；
+- `sample_project_h5_progress_panel` —— 运行期进度面板（emit 进度 + wait 收结果）。
 
 ### 6.1 运行前菜单：项目级 `project.json → runGate`
 

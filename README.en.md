@@ -42,7 +42,11 @@ wemod-script-author/
 │   ├── window-trigger-001.axs         # window trigger: run when the target window appears
 │   ├── h5-gate-menu-001.axsp           # H5 run-gate menu (project package): runGate → ui/menu.html, screen-size math, conditional fields, params into variables
 │   ├── h5-events-panel-001.axsp        # H5 runtime event panel (project package): runtime.h5.open → emit → page on/emit → wait → close
-│   └── elevator-inspection-fill-h5-001.axsp  # elevator inspection form filling (H5 menu edition, project package): full business project
+│   ├── elevator-inspection-fill-h5-001.axsp  # elevator inspection form filling (H5 menu edition, project package): full business project
+│   ├── h5-wizard-001.axsp              # multi-step wizard (project package): 3-step form (basics → options → summary) + step bar, wemod.start(values) only on step 3
+│   ├── h5-form-confirm-001.axsp        # form validation + second confirmation (project package): inline red errors, in-page confirm layer, start only after confirming
+│   ├── h5-multi-select-001.axsp        # multi-select list → array variable (project package): 8 checkboxes + select-all/invert + count → 选中项: ["A","B"] → script iterates the array
+│   └── h5-progress-panel-001.axsp      # runtime progress panel (project package): no runGate, script open → 3 × emit(progress) → wait(done) → close
 ├── tools/
 │   ├── validate-script.mjs     # offline validator (runs on node; no Android / source needed)
 │   └── validate-axsp.mjs       # .axsp project-package validator (project.json / runGate.path / main.axs, reuses validate-script)
