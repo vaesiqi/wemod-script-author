@@ -104,6 +104,7 @@ node tools/validate-axsp.mjs
 - **两个面**：运行前菜单（项目级 `project.json → runGate`）与运行期页面（脚本 `runtime.h5.*`）；页面侧 API 同一个 `window.wemod`（页面加载后注入，可监听 `wemod:ready`）。
 - **窗口尺寸优先级**：`<meta name="wemod-size" content="宽x高">` → `runGate.widthDp/heightDp` → 运行中 `wemod.setSize` → 用户拖拽/缩放（不写回项目）→ 屏幕+系统栏夹取；**CSS 宽高改不了窗口**。
 - **`wemod.screen()`** 字段：`widthPx/heightPx`、`widthDp/heightDp`、`density`、`densityDpi`、`safeTopPx`、`safeBottomPx`、`availableWidthPx`、`availableHeightPx`、`windowWidthPx`、`windowHeightPx`、`orientation`（`portrait` / `landscape`）。
+- **运行控制**：`wemod.start(values)`（运行前菜单放行；门已完成后再点 = 按最新参数再跑一次）、`wemod.stop()`（停止当前运行，只停脚本不关页面）、`wemod.pause()/resume()`、`wemod.runState()`；控制台停止后再从菜单点【开始运行】即可重跑。
 - **坑**：`runtime.log` 不存在（用 `console.log` / `runtime.process.log`，页面用 `wemod.log`，否则 Rhino 报 `TypeError: Cannot find default value for object`）；原生 `<select>` 会被宿主自动升级为页面内下拉（直接写 select，别再造一套）；首帧透明（防白闪，关键 UI 别太晚渲染）；别依赖 `html,body{height:100%}` 撑满（固定 header/footer + 中间 `overflow-y:auto`，或 `position:fixed; inset:0`）；标题栏归谁画看 `title` 是否为空；调试看 logcat `H5OverlayHost` / `H5RunGate` / `WeMod/HOST`。
 
 ## 版本与模型基准

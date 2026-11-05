@@ -910,6 +910,8 @@ JS 内可用 `runtime.*` 命名空间（**以源码 `RunCodeHandler.kt` 注册�
 
 > `wemod.on(name, cb)` 拿到的 `data` 形态以宿主为准：写页面时用 `typeof data === 'string' ? JSON.parse(data) : data` 兜一下最稳（`wait` 返回的**确定**是 JSON 文本，见 6.6）。
 
+| 运行 | `start(values)` / `cancel()` / `rerun(values)` / `stop()` / `pause()` / `resume()` / `runState()` —— `start` 在门已完成时等价再跑一次；`stop` 只停脚本不关页面 |
+
 ### 6.4 `wemod.screen()` 返回的字段
 
 判断横竖屏、避开系统栏、算初始尺寸都用它（`Px` 后缀 = 像素，`Dp` = dp）：
